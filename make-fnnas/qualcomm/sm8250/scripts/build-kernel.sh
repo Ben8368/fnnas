@@ -40,11 +40,20 @@ armbian_patches=$repo/make-fnnas/qualcomm/sm8250/sources/armbian-34f4924/patch/k
 test -d "$armbian_patches"
 patch_manifest=${UMI_PATCH_MANIFEST:-$work/armbian-patches.tsv}
 apply_umi_armbian_patches "$work/linux" "$linux_commit" "$armbian_patches" "$patch_manifest"
+port="$repo/make-fnnas/qualcomm/sm8250/kernel"
+patch_path="$port/patches/sm8250-6.18/0070-umi-match-abl-kona.patch"
+patch_sha=$(sha256sum < "$patch_path")
+patch_sha=${patch_sha%% *}
+if ! git -C linux apply --exclude=drivers/soc/qcom/ubwc_config.c "$patch_path"; then
+    printf '%s\t%s\tconflict\tFailed mandatory Umi cpufreq/PD mapper changes\n' "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
+    exit 1
+fi
+printf '%s\t%s\tapplied\tCPUfreq and PD mapper hunks\n' "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
+printf '%s:ubwc_config.c\t%s\treviewed-skip\tNative DSI port handles UBWC; preserve upstream table\n' \
+    "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
 if [[ $patch_manifest != "$work/armbian-patches.tsv" ]]; then
     cp -- "$patch_manifest" "$work/armbian-patches.tsv"
 fi
-port="$repo/make-fnnas/qualcomm/sm8250/kernel"
-git -C linux apply --exclude=drivers/soc/qcom/ubwc_config.c "$port/patches/sm8250-6.18/0070-umi-match-abl-kona.patch"
 cp "$port"/dts/* linux/arch/arm64/boot/dts/qcom/
 cat >> linux/arch/arm64/boot/dts/qcom/Makefile <<'MAKEFILE'
 

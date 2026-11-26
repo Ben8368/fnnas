@@ -32,6 +32,7 @@ def main():
     p.add_argument("--base-dtb", type=Path, help="override DTB only for a baseline comparison")
     p.add_argument("--display-vblank", type=Path, help="include a static ARM64 DRM callback probe")
     p.add_argument("--gpu-check", type=Path, help="include a static ARM64 MSM initialization probe")
+    p.add_argument("--package-sha256", help="Embed the exact kernel bundle digest in the physical acceptance log")
     args = p.parse_args()
     try:
         header, kernel, ramdisk, dtb = pack.split_boot(args.boot.read_bytes())
@@ -42,6 +43,13 @@ def main():
         if args.base_dtb:
             dtb = args.base_dtb.read_bytes()
         script = (HERE / "umi-ram-probe.sh").read_bytes()
+        if args.package_sha256:
+            if args.base_dtb or not re.fullmatch(r"[0-9a-f]{64}", args.package_sha256):
+                raise ValueError("package acceptance requires a SHA-256 and the unmodified bundle DTB")
+            marker = b'log "PID1 kernel=$(uname -r)"'
+            if script.count(marker) != 1:
+                raise ValueError("missing probe identity insertion point")
+            script = script.replace(marker, marker + b"\nlog artifact_sha256=" + args.package_sha256.encode())
         probe = newc_entry("umi-probe", 1, 0o100755, script)
         for inode, (name, path) in enumerate((
             ("umi-display-vblank", args.display_vblank), ("umi-gpu-check", args.gpu_check)

@@ -15,6 +15,7 @@ from urllib.request import Request, urlopen
 
 
 PUBLISH_REPO = "Ben8368/fnnas"
+PUBLISH_OPERATOR = "Ben8368"
 PUBLISH_BRANCH = "codex/qualcomm-sm8250"
 WORKFLOW = ".github/workflows/build-kernel.yml"
 SHA = r"[0-9a-f]{40}"
@@ -213,6 +214,8 @@ def gh(*arguments):
 
 
 def promote(args):
+    if args.publish and gh("api", "user", "--jq", ".login").casefold() != PUBLISH_OPERATOR.casefold():
+        raise ValueError("Publication requires the authorized maintainer's local GitHub credential")
     if args.profile not in PROFILE_RATE or not re.fullmatch(SHA, args.source):
         raise ValueError("Require a full source SHA and a release profile")
     if min(args.run_id, args.run_attempt) < 1:
@@ -260,6 +263,15 @@ def promote(args):
         shutil.copyfile(args.evidence, evidence)
         if sha256(evidence) != record["evidence_sha256"]:
             raise ValueError("Physical device evidence digest mismatch")
+        text = evidence.read_text(encoding="utf-8", errors="replace")
+        expected_lines = (
+            f"UMI_PROBE: PID1 kernel={version}-csot{rate}-sm8250",
+            f"UMI_PROBE: artifact_sha256={data['package_sha256']}",
+            "UMI_PROBE_REPORT_END",
+            "Android sys.boot_completed=1",
+        )
+        if not set(expected_lines) <= set(text.splitlines()):
+            raise ValueError("Evidence is missing the exact package ID, PID 1, USB report or Android recovery")
         data["acceptance"] = record
         tag = tag_for(version, rate, args.source)
         print(json.dumps({**data, "tag": tag}, indent=2))

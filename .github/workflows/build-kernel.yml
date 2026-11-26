@@ -4,7 +4,11 @@ on:
     branches: [codex/qualcomm-sm8250, 'pr/qualcomm-*']
     paths:
       - '.github/workflows/build-kernel.yml'
-      - 'make-fnnas/qualcomm/sm8250/**'
+      - 'make-fnnas/qualcomm/sm8250/kernel/**'
+      - 'make-fnnas/qualcomm/sm8250/sources/**'
+      - 'make-fnnas/qualcomm/sm8250/scripts/build-kernel.sh'
+      - 'make-fnnas/qualcomm/sm8250/scripts/kernel-release.py'
+      - 'make-fnnas/qualcomm/sm8250/scripts/rekernel.sh'
       - 'make-fnnas/boards/xiaomi-umi.yml'
       - 'make-fnnas/fnnas-files/different-files/xiaomi-umi/**'
       - 'make-fnnas/fnnas-files/platform-files/qualcomm/**'
@@ -15,8 +19,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: kernel-${{ github.ref }}-${{ vars.UMI_KERNEL_PROFILE || 'release' }}
-  cancel-in-progress: true
+  group: kernel-${{ github.ref }}-${{ github.sha }}-${{ vars.UMI_KERNEL_PROFILE || 'release' }}
+  cancel-in-progress: false
 
 jobs:
   build:
