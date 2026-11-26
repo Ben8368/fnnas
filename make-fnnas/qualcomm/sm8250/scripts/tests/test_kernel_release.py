@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -49,6 +50,31 @@ class KernelReleaseTests(unittest.TestCase):
         with patch.object(kernel_release, "release_api", return_value=[rejected]):
             with self.assertRaisesRegex(ValueError, "no accepted"):
                 kernel_release.select_asset("owner/repo", "60", "auto")
+
+    def test_promotion_rejects_wrong_source_or_attempt_before_download(self):
+        p = kernel_release
+        source = "a" * 40
+        destination = {"private": False, "owner": {"login": p.PUBLISH_OPERATOR}, "full_name": p.PUBLISH_REPO}
+        valid = {"head_repository": {"full_name": p.PUBLISH_REPO}, "head_branch": p.PUBLISH_BRANCH,
+                 "head_sha": source, "conclusion": "success", "event": "push", "path": p.WORKFLOW,
+                 "id": 123, "run_attempt": 2}
+        request = SimpleNamespace(source=source, profile="release", run_id=123, run_attempt=2,
+                                  release_repo=None, publish=False)
+        for name, rejected in {"head_branch": "pr/qualcomm-test", "head_sha": "b" * 40,
+                               "run_attempt": 1, "conclusion": "failure", "event": "workflow_dispatch"}.items():
+            with self.subTest(name=name), patch.object(p, "gh", side_effect=[json.dumps(destination),
+                    json.dumps({**valid, name: rejected})]) as gh:
+                with self.assertRaisesRegex(ValueError, "Not a successful build"):
+                    p.promote(request)
+                self.assertEqual(gh.call_count, 2)  # Never download, tag or publish.
+
+    def test_acceptance_must_name_the_exact_package(self):
+        p = kernel_release
+        identity = {"run_id": 123, "run_attempt": 2, "source_commit": "a" * 40,
+                    "linux_commit": "b" * 40, "profile": "release", "package_sha256": "c" * 64}
+        stale = {**identity, "package_sha256": "d" * 64}
+        with self.assertRaisesRegex(ValueError, "exact build and package"):
+            p.acceptance_record(stale, identity)
 
     def test_package_round_trip_and_digest_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

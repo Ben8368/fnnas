@@ -39,8 +39,8 @@ staged=$scratch/staged
 tar --numeric-owner --xattrs --xattrs-include='*' --acls --selinux -xpf "$scratch/rootfs.tar" -C "$staged"
 rm -- "$scratch/rootfs.tar"
 uuid=$(uuidgen -r | tr '[:upper:]' '[:lower:]')
-"$FNOS_PYTHON" -B "$scripts/native-rootfs.py" prepare "$staged" "$report" "$firmware" "$firmware_sha" "$uuid"
 bash "$scripts/apply-files.sh" "$staged"
+"$FNOS_PYTHON" -B "$scripts/native-rootfs.py" prepare "$staged" "$report" "$firmware" "$firmware_sha" "$uuid"
 result=$scratch/output
 mkdir -- "$result"
 UMI_NATIVE_BTRFS=1 bash "$scripts/build-boot-pair.sh" "$boot" "$staged" "$uuid" "$scratch/boot-work" "$scratch/kernel"

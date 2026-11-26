@@ -24,6 +24,6 @@ for layer in platform-files/qualcomm/sm8250 different-files/xiaomi-umi; do
     source=$resources/fnnas-files/$layer/rootfs
     if [[ -d $source ]]; then
         # Git records file modes and symlinks. Ignore checkout-specific ACLs and xattrs.
-        rsync -aH --chown=0:0 -- "$source/" "$root/"
+        rsync -aH --chmod=Du=rwx,Dgo=rx,Fgo-w --chown=0:0 -- "$source/" "$root/"
     fi
 done
