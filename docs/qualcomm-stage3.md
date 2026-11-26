@@ -3,7 +3,7 @@
 ## CI 与发布职责
 
 - `main` 保持为默认分支，只与 `ophub/fnnas/main` 快进同步。分支专用的工作流不放到 `main`。GitHub 要求 `workflow_dispatch` 文件先存在于默认分支，因此 Umi 工作流运行入口为 `codex/qualcomm-sm8250` 和 `pr/qualcomm-*` 的 `push`。要对同一 SHA 重试，使用 `gh run rerun RUN_ID -R Ben8368/fnnas`，并记录新的 Attempt。`pr/qualcomm-*` 能跑 CI，不是授权发布分支。
-- `Build Umi kernel` 默认 `release`（CSOT 60 Hz）及 `locked`（6.18.60）。仓库维护者可在下一次相关文件推送前设置 Actions Variables `UMI_KERNEL_PROFILE`、`UMI_KERNEL_VERSION`；它们不是发布授权。`auto` 解析 kernel.org 上最高正式 6.18.y 标签；也支持具体版本。每次核对解析到的实际提交和 `kernel-source.tsv`，不要只记 `auto`。补丁必须零 fuzz，或者反向应用检查证明已存在；另外只允许名称及摘要均匹配的有理由的跳过。未知冲突停止，不能被目录范围内的自动跳过掩盖。Armbian `0021` 只调整 Makefile 上下文，未更改驱动内容。
+- `Build Umi kernel` 默认 `release`（CSOT 60 Hz）及 `auto`。设置 `UMI_KERNEL_VERSION=locked` 可复现 6.18.60。仓库维护者可在下一次相关文件推送前设置 Actions Variables `UMI_KERNEL_PROFILE`、`UMI_KERNEL_VERSION`；它们不是发布授权。`auto` 解析 kernel.org 上最高正式 6.18.y 标签；也支持具体版本。每次核对解析到的实际提交和 `kernel-source.tsv`，不要只记 `auto`。补丁必须零 fuzz，或者反向应用检查证明已存在；另外只允许名称及摘要均匹配的有理由的跳过。未知冲突停止，不能被目录范围内的自动跳过掩盖。Armbian `0021` 只调整 Makefile 上下文，未更改驱动内容。
 - 构建 job 只有 `contents: read`。删除旧的 `publish-umi-kernel.yml`；不再修改共用的 `kernel_fnnas` Release。新标签形如 `umi-kernel-6.18.60-csot60-<40位源码SHA>`，直指源码提交。发布只接受 `Ben8368/fnnas:codex/qualcomm-sm8250` 上 workflow 路径、指定 full SHA、Run ID、Attempt、profile 均吻合且成功的 push 构建；发布权限在本机维护者凭据中。`--publish` 前默认只审查，不写远端。
 
 ## 内核真机验收与提升
