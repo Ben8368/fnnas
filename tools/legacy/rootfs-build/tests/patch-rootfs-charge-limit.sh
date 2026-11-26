@@ -14,7 +14,7 @@ PORT="$(cd "$SELF/.." && pwd)"           # 本移植包根目录
 BASE="${BASE:-$PWD}"
 OUT="${OUT:-$BASE/output}"
 IMG="${IMG:-$OUT/Armbian-unofficial_26.11.0-trunk_Xiaomi-umi_trixie_current_6.18.52_minimal.rootfs.img}"
-NEW="${NEW:-$PORT/../../../make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/bin/battery-charge-limit}"
+NEW="${NEW:-$PORT/../../../make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/usr/local/bin/battery-charge-limit}"
 TEST="${TEST:-$SELF/test-charge-limit.sh}"
 MNT=/mnt/umipatch
 

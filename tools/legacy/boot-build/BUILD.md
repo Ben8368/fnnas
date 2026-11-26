@@ -29,7 +29,7 @@ tools/legacy/boot-build/
 ├── dts.patch                      # 历史基线 DTS 的差异
 └── CHANGELOG-2026-09-27.md
 
-make-fnos/boot/abl-android-v2/
+make-fnnas/qualcomm/sm8250/boot/abl-android-v2/
 ├── baseline/                      # 原始 DTB、反编译的 DTS 与基线说明
 ├── overlays/
 └── tools/                         # 重打包、替换 DTB 和生成 ABL 锚点
@@ -72,7 +72,7 @@ bash tools/legacy/boot-build/build-boot.sh <基底boot.img> <输出boot.img>
 
 ```
 $ dtc -@ -I dts -O dtb -o rebuilt.dtb ../dtb/slim-ovf-wifi6-gpu-oc-final.dts
-$ python3 ../../../make-fnos/boot/abl-android-v2/tools/replace-dtb.py ../boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img \
+$ python3 ../../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/replace-dtb.py ../boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img \
                                rebuilt.dtb out/boot-rebuilt.img
 
 重建产物 DTB : b0e48ef96880567160182be4d31dc5721fa33ce3b3551909388b8e50612a99c2
@@ -88,7 +88,7 @@ $ python3 ../../../make-fnos/boot/abl-android-v2/tools/replace-dtb.py ../boot/bo
 
 ```bash
 cd boot-build
-patch -p0 -o /tmp/current.dts ../../../make-fnos/boot/abl-android-v2/baseline/armbian-baseline-umi-csot.dts < dts.patch
+patch -p0 -o /tmp/current.dts ../../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/baseline/armbian-baseline-umi-csot.dts < dts.patch
 diff -q /tmp/current.dts ../dtb/slim-ovf-wifi6-gpu-oc-final.dts    # 应当无输出
 ```
 
@@ -125,18 +125,18 @@ diff -q /tmp/current.dts ../dtb/slim-ovf-wifi6-gpu-oc-final.dts    # 应当无�
 
 ```bash
 # ① 上游 Armbian v0  →  v2（顺带瘦身 initrd、挪 dtb_addr 避开重叠、注入 ramoops）
-python3 make-fnos/boot/abl-android-v2/tools/rebuild-boot.py \
+python3 make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/rebuild-boot.py \
     --src <Armbian ...boot_sm8250-xiaomi-umi-csot.img> \
     --out /tmp/v2.img \
     --slim --disable-dsp --ramoops
 
 # ② 基线 DTB → 当前 DTS → 编译
-dtc -I dtb -O dts -o baseline.dts make-fnos/boot/abl-android-v2/baseline/armbian-baseline-umi-csot.dtb
+dtc -I dtb -O dts -o baseline.dts make-fnnas/qualcomm/sm8250/boot/abl-android-v2/baseline/armbian-baseline-umi-csot.dtb
 patch -p0 -o current.dts baseline.dts < tools/legacy/boot-build/dts.patch
 dtc -@ -I dts -O dtb -o current.dtb current.dts        # ★ -@ 必须有
 
 # ③ 塞回 v2 镜像
-python3 make-fnos/boot/abl-android-v2/tools/replace-dtb.py /tmp/v2.img current.dtb boot-umi.img
+python3 make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/replace-dtb.py /tmp/v2.img current.dtb boot-umi.img
 ```
 
 `rebuild-boot.py` 常用开关：

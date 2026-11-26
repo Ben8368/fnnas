@@ -1,4 +1,4 @@
-557c702eb0ff89af6bde6d5a1e3f69987f78a292646945fd4e42b8b0d0ce9abf  make-fnos/kernel/config/umi-6.18.60-csot90.config
+557c702eb0ff89af6bde6d5a1e3f69987f78a292646945fd4e42b8b0d0ce9abf  make-fnnas/qualcomm/sm8250/kernel/config/umi-6.18.60-csot90.config
 7c48e60f56147d70fc05a74f6070f9f9b1c9cffc6957b2e15e85c893341f3059  boot-umi-csot-90hz-6.18.60-btrfs-builtin.img
 8f4dbefbe023fec51a34000685992453f2365b2805e7cac6758380f53a7d41e3  rootfs-umi-csot-90hz-6.18.60-btrfs-builtin.img
 f41e21b7fe026774a17e8027eca992cd08a838a4f7dcdd12804a5d65030e77b4  boot-umi-csot-90hz-6.18.60-btrfs-builtin-ram.img

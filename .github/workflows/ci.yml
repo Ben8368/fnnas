@@ -39,7 +39,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update -qq && sudo apt-get install -y device-tree-compiler
       - name: Boot tooling tests
-        run: python -B -m unittest discover -v -s make-fnos/boot/abl-android-v2/tests
+        run: python -B -m unittest discover -v -s make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tests
       - name: Rootfs DTB tests
         if: runner.os == 'Linux'
         run: python -B -m unittest discover -v -s tools/legacy/rootfs-build/tests
@@ -69,4 +69,4 @@ jobs:
       - name: Audit generated ext4 and Btrfs images
         run: |
           sudo env LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg \
-            FNOS_PYTHON=/usr/bin/python3 /usr/bin/python3 -B -m unittest discover -v -s make-fnos/scripts/tests
+            FNOS_PYTHON=/usr/bin/python3 /usr/bin/python3 -B -m unittest discover -v -s make-fnnas/qualcomm/sm8250/scripts/tests

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run without root. Redirect device commands and the state marker into a fixture.
 set -euo pipefail
-src="$(dirname "${BASH_SOURCE[0]}")/../../../../make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/sbin/umi-serial-console"
+src="$(dirname "${BASH_SOURCE[0]}")/../../../../make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/usr/local/sbin/umi-serial-console"
 export FIXTURE
 FIXTURE=$(mktemp -d)
 trap 'rm -r -- "$FIXTURE"' EXIT

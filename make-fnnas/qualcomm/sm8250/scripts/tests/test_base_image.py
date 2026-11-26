@@ -1,4 +1,4 @@
-"""Exercise the refnos CLI with partitioned ext4 and Btrfs donor fixtures."""
+"""Exercise the Umi renas CLI with partitioned ext4 and Btrfs donor fixtures."""
 from contextlib import closing
 import gzip
 import hashlib
@@ -14,7 +14,7 @@ import unittest
 import guestfs
 
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[5]
 MIB = 1024 * 1024
 
 
@@ -69,7 +69,7 @@ class BaseImageTests(unittest.TestCase):
             guest.shutdown()
 
     def run_inspect(self, image, output, *options):
-        return subprocess.run(["bash", REPO / "refnos", "inspect", image, "--output", output, *options],
+        return subprocess.run(["bash", REPO / "renas", "-b", "xiaomi-umi", "inspect", image, "--output", output, *options],
                               check=False, text=True, capture_output=True)
 
     def test_partitioned_ext4_archive(self):
@@ -98,7 +98,7 @@ class BaseImageTests(unittest.TestCase):
         self.assertIn("debian_version: 13.0", (result / "rootfs-report.txt").read_text())
 
         rootfs = self.directory / "ext4-rootfs.tar"
-        command = ["bash", REPO / "refnos", "extract", archive, rootfs, "--sha256"]
+        command = ["bash", REPO / "renas", "-b", "xiaomi-umi", "extract", archive, rootfs, "--sha256"]
         rejected = subprocess.run([*command, "0" * 64], capture_output=True, text=True)
         self.assertNotEqual(rejected.returncode, 0)
         self.assertFalse(rootfs.exists())

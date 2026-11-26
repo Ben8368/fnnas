@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 PROJECT = Path(__file__).resolve().parents[1]
 SOURCE_LOCK = PROJECT / "sources/fnos-arm64.lock"
-DEFAULT_REPORT = PROJECT.parent / "out/base-image-report"
+DEFAULT_REPORT = PROJECT.parents[2] / "out/base-image-report"
 # The guest disk is opened read-only; keep Btrfs mounts read-only as well.
 MOUNT_OPTIONS = {"ext4": "ro,noload", "btrfs": "ro"}
 SERVICE_DIRS = ("/etc/systemd/system", "/usr/lib/systemd/system", "/lib/systemd/system")

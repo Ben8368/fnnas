@@ -16,7 +16,7 @@ jobs:
       - name: Download the locked base from the vendor
         env:
           FNOS_SIGNED_URL: ${{ secrets.FNOS_SIGNED_URL }}
-        run: ./refnos download "$RUNNER_TEMP/fnos.img.gz" --url "$FNOS_SIGNED_URL"
+        run: ./renas -b xiaomi-umi download "$RUNNER_TEMP/fnos.img.gz" --url "$FNOS_SIGNED_URL"
       - name: Install image tooling
         run: |
           sudo apt-get update -qq
@@ -40,4 +40,4 @@ jobs:
           FNOS_PYTHON: /usr/bin/python3
           LIBGUESTFS_BACKEND: direct
           LIBGUESTFS_BACKEND_SETTINGS: force_tcg
-        run: ./refnos extract "$RUNNER_TEMP/fnos.img.gz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked
+        run: ./renas -b xiaomi-umi extract "$RUNNER_TEMP/fnos.img.gz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked

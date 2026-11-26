@@ -47,6 +47,13 @@
 #
 #================================ Set make environment variables ================================
 #
+# The Umi backend handles Android boot and layout independently of disk-image builds.
+if [[ ${1:-} == -b || ${1:-} == --board ]] && [[ ${2:-} == xiaomi-umi ]]; then
+    repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+    shift 2
+    exec bash "$repo/make-fnnas/qualcomm/sm8250/scripts/renas.sh" "$@"
+fi
+
 # Related file storage paths
 current_path="${PWD}"
 make_path="${current_path}/fnnas"

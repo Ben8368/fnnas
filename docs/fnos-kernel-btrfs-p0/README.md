@@ -24,11 +24,11 @@
 
 2026-11-26 用同次完整 release 构建产物完成 RAM 启动验证。USB ACM 记录了 `RESULT: PASS all RAM-only Btrfs P0 checks`；测试镜像随后自动重启。此前 2026-11-25 的模块模式验收仍作为历史记录保留在旧日志中。
 
-可用 [build-btrfs-p0-ramdisk.sh](../../make-fnos/boot/abl-android-v2/tools/build-btrfs-p0-ramdisk.sh) 从同次 release 构建生成 RAM 测试镜像。脚本检查内核配置中的 Btrfs/crypto/RAID 依赖均为 built-in、模块树与 initramfs 不包含 `btrfs.ko`，再从目标 rootfs 收集测试工具及共享库，生成并只读检查 160 MiB 测试卷并重打包 boot。生成的镜像只能用 `fastboot boot`。
+可用 [build-btrfs-p0-ramdisk.sh](../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/build-btrfs-p0-ramdisk.sh) 从同次 release 构建生成 RAM 测试镜像。脚本检查内核配置中的 Btrfs/crypto/RAID 依赖均为 built-in、模块树与 initramfs 不包含 `btrfs.ko`，再从目标 rootfs 收集测试工具及共享库，生成并只读检查 160 MiB 测试卷并重打包 boot。生成的镜像只能用 `fastboot boot`。
 
 ## 配置与模块依赖
 
-实际构建配置见[基线 kernel.config](../../make-fnos/kernel/config/umi-6.18.60-base.config)和[CSOT 90 Hz 完整配置](artifacts/umi-6.18.60-csot90-sm8250-btrfs-builtin.config)。基线配置 SHA-256 为 `a29b9bcfc0d70b4d48e75806fe26ba9766801ffd4915544d8fce483513bdac7e`；构建会从固定 base boot 重新提取 IKCONFIG 并逐字节核对。最终配置关键项：
+实际构建配置见[基线 kernel.config](../../make-fnnas/qualcomm/sm8250/kernel/config/umi-6.18.60-base.config)和[CSOT 90 Hz 完整配置](artifacts/umi-6.18.60-csot90-sm8250-btrfs-builtin.config)。基线配置 SHA-256 为 `a29b9bcfc0d70b4d48e75806fe26ba9766801ffd4915544d8fce483513bdac7e`；构建会从固定 base boot 重新提取 IKCONFIG 并逐字节核对。最终配置关键项：
 
 ```text
 CONFIG_BTRFS_FS=y
@@ -70,7 +70,7 @@ boot.img 与测试卷本身作为本地/发布产物，不提交 Git；SHA256 �
 
 ## 全内核 RAM 启动与硬件探针
 
-2026-11-26 从完整 CSOT 90 Hz release boot 生成 [RAM 硬件探针镜像](../../make-fnos/boot/abl-android-v2/tools/make-ram-probe.py)，通过 `fastboot boot` 启动。镜像到达 Linux 6.18.60 诊断 PID 1，运行约 35 秒后按探针设计重启；Android 随后恢复且 `sys.boot_completed=1`。没有刷写分区、挂载或写入手机实际存储。
+2026-11-26 从完整 CSOT 90 Hz release boot 生成 [RAM 硬件探针镜像](../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/make-ram-probe.py)，通过 `fastboot boot` 启动。镜像到达 Linux 6.18.60 诊断 PID 1，运行约 35 秒后按探针设计重启；Android 随后恢复且 `sys.boot_completed=1`。没有刷写分区、挂载或写入手机实际存储。
 
 | 项目 | 结果 | 证据 / 限制 |
 | --- | --- | --- |

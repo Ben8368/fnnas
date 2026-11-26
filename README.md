@@ -9,7 +9,7 @@
 
 This project benefits from the sustained contributions of numerous [contributors](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/CONTRIBUTORS.md). Under the guidance of FnNAS official technical experts, we have built an FnNAS system adapted for Arm64 architecture, covering TV boxes powered by `Amlogic`, `Rockchip`, and `Allwinner` SoCs. The build version fully inherits all features of the official system, with support for writing to eMMC boot and online kernel updates. Please visit the [⬇️Releases](https://github.com/ophub/fnnas/releases) page to download the latest firmware. You are welcome to `Fork` this project for personalized customization. If this project is helpful to you, please click the `⭐Star` in the upper right corner of the repository to show your support!
 
-This fork also includes [Xiaomi Mi 10 (SM8250) support](README.umi.md) through a dedicated Android ABL v2 boot chain and a pinned Linux 6.18.60 kernel. The existing UMI images use Debian. Integration of the fnOS user space is still in progress.
+This fork develops Qualcomm SM8250 support for the Xiaomi Mi 10 on `codex/qualcomm-sm8250`. Use `renas -b xiaomi-umi` for image operations and `rekernel -b xiaomi-umi` for Linux 6.18.y kernel builds. UMI can reproduce the Debian baseline, and fnOS integration is still in progress. [Device documentation](README.umi.md) · [Build guide](docs/03-自行构建.md)
 
 ## FnNAS Firmware Default Information
 
@@ -20,7 +20,7 @@ This fork also includes [Xiaomi Mi 10 (SM8250) support](README.umi.md) through a
 
 ## Supported Device List
 
-⬆️ Models for each platform (Amlogic/Rockchip/Allwinner) are arranged by SoC performance from high to low.
+⬆️ Amlogic, Rockchip, and Allwinner models are ordered by SoC performance within each platform. Qualcomm SM8250 is listed with its current validation status.
 
 | SoC  | [Device](https://github.com/ophub/fnnas/releases) | [Kernel](https://github.com/ophub/fnnas) |
 | ---- | ---- | ---- |
@@ -50,6 +50,7 @@ This fork also includes [Xiaomi Mi 10 (SM8250) support](README.umi.md) through a
 | rk3318 | [RX3318-Box](https://github.com/ophub/amlogic-s9xxx-armbian/pull/2129) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
 | h618 | [OrangePi-Zero3](https://github.com/ophub/fnnas/issues/158), [H618-DevBoard(PCDN)](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3479), [Vontar-h618](https://github.com/ophub/fnnas/issues/525), [BT-100M](https://github.com/ophub/fnnas/issues/525), [BT-1000M](https://github.com/ophub/fnnas/issues/525), [PaiNet-P3](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3485), [PaiNet-P5](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3577), [X98H](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3434), [X98H-100MiB](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3717), [AI-Douhe](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3556), [CJDS](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3652), [YDZY-box](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3786) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
 | h6 | [Vplus](https://github.com/ophub/amlogic-s9xxx-armbian/issues/1100), [Tanix-TX6](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3534), [TX6-H](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3528), [T95-max](https://github.com/ophub/fnnas/issues/546), [TQC-A01](https://github.com/ophub/amlogic-s9xxx-armbian/pull/1638) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
+| SM8250 (Qualcomm) | [Xiaomi Mi 10 (UMI)](README.umi.md), CSOT RAM boot verified. Native fnOS integration in progress. | [Linux 6.18.y](make-fnnas/qualcomm/sm8250/README.md#umi-内核选版) |
 
 > [!TIP]
 > Currently, [s905 series boxes](https://github.com/ophub/amlogic-s9xxx-armbian/issues/1173) can only boot from `TF/SD/USB`, while other box models support writing to `eMMC`. For more information, please refer to the [✅Supported Device List Instructions](make-fnnas/fnnas-files/common-files/etc/model_database.conf). To add new supported devices, refer to section 12.15 in the documentation: [✳️Adding New Supported Devices](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/documents/README.md#1215-how-to-add-new-supported-devices).
@@ -57,7 +58,7 @@ This fork also includes [Xiaomi Mi 10 (SM8250) support](README.umi.md) through a
 
 ## Instructions for Installing and Upgrading FnNAS
 
-Select the FnNAS system corresponding to your device model. Refer to the respective instructions for usage on different devices.
+Select the FnNAS image for your device. Xiaomi Mi 10 uses Android ABL v2. Follow the [UMI RAM boot validation guide](docs/04-真机无刷写验收.md).
 
 - ### Install FnNAS to eMMC
 
@@ -297,3 +298,5 @@ The [u-boot](https://github.com/ophub/u-boot), [kernel](https://github.com/ophub
 ## License
 
 fnnas © OPHUB is licensed under [GPL-2.0](LICENSE)
+
+UMI source attribution and component-specific licenses are listed in [NOTICE](NOTICE.md).

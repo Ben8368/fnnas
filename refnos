@@ -1,32 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-case "${1:-}" in
-    inspect)
-        shift
-        exec bash "$repo/make-fnos/scripts/inspect-base.sh" "$@"
-        ;;
-    extract)
-        shift
-        exec bash "$repo/make-fnos/scripts/extract-rootfs.sh" "$@"
-        ;;
-    download)
-        shift
-        exec bash "$repo/make-fnos/scripts/download-base.sh" "$@"
-        ;;
-    kernel)
-        shift
-        exec "${FNOS_PYTHON:-python3}" "$repo/make-fnos/scripts/kernel-release.py" "$@"
-        ;;
-    boot)
-        shift
-        exec bash "$repo/make-fnos/scripts/build-released-boot.sh" "$@"
-        ;;
-    -h|--help|'')
-        printf 'Usage: refnos {inspect|download|extract|kernel|boot} --help\n'
-        ;;
-    *)
-        printf 'Unknown refnos command: %s\n' "$1" >&2
-        exit 2
-        ;;
-esac
+exec bash "$repo/renas" -b xiaomi-umi "$@"

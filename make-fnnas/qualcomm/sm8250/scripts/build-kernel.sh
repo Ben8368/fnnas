@@ -2,8 +2,8 @@
 # Build Linux Stable with the configuration embedded in the Umi boot donor.
 set -euo pipefail
 
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-source "$repo/make-fnos/kernel/source.sh"
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
+source "$repo/make-fnnas/qualcomm/sm8250/kernel/source.sh"
 if (($# != 2)); then
     echo "Usage: $0 MAIN_BOOT_IMG NEW_LINUX_WORK_DIR" >&2
     exit 2
@@ -31,15 +31,15 @@ printf '%s\n' "$linux_source" > kernel-source.tsv
 unpack_bootimg --boot_img "$boot" --out main-boot
 gzip -dc main-boot/kernel > main-boot/Image
 linux/scripts/extract-ikconfig main-boot/Image > main-boot/kernel.config
-locked_config=$repo/make-fnos/kernel/config/umi-6.18.60-base.config
+locked_config=$repo/make-fnnas/qualcomm/sm8250/kernel/config/umi-6.18.60-base.config
 cmp -- main-boot/kernel.config "$locked_config" || {
     echo 'Base kernel config differs from the checked-in, SHA-locked release config.' >&2
     exit 1
 }
-armbian_patches=$repo/make-fnos/sources/armbian-34f4924/patch/kernel/archive/sm8250-6.18
+armbian_patches=$repo/make-fnnas/qualcomm/sm8250/sources/armbian-34f4924/patch/kernel/archive/sm8250-6.18
 test -d "$armbian_patches"
 apply_umi_armbian_patches "$work/linux" "$linux_commit" "$armbian_patches"
-port="$repo/make-fnos/kernel"
+port="$repo/make-fnnas/qualcomm/sm8250/kernel"
 git -C linux apply --exclude=drivers/soc/qcom/ubwc_config.c "$port/patches/sm8250-6.18/0070-umi-match-abl-kona.patch"
 cp "$port"/dts/* linux/arch/arm64/boot/dts/qcom/
 cat >> linux/arch/arm64/boot/dts/qcom/Makefile <<'MAKEFILE'

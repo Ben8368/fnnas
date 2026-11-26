@@ -12,7 +12,7 @@ krel=$3
 rootfs=$(realpath -e -- "$4")
 staging=$(realpath -m -- "$5")
 output=$(realpath -m -- "$6")
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
 mkdir -m 700 -- "$staging"
 (cd "$staging"; gzip -dc -- "$ramdisk" | cpio --quiet -idm --no-absolute-filenames)
 # The boot donor contains a bytewise different ZAP blob under the same name.
@@ -66,7 +66,7 @@ for module in "${extra_modules[@]}"; do
 done
 # Use the same CSOT backlight policy during early udev coldplug and rootfs boot.
 rule=etc/udev/rules.d/80-umi-csot-backlight.rules
-install -Dm644 "$repo/make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/$rule" "$staging/$rule"
+install -Dm644 "$repo/make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/$rule" "$staging/$rule"
 # Retain the rest of the early userspace, with its root UUID updated below.
 if [[ -n ${UMI_ROOT_UUID:-} ]]; then
     sed -i "s/02232280-925f-4edc-984f-24e466d3b6f1/$UMI_ROOT_UUID/g" "$staging/etc/fstab"

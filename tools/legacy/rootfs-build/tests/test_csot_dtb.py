@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 
-VERIFY = Path(__file__).resolve().parents[4] / "make-fnos/kernel/config/csot/verify-dtb.py"
+VERIFY = Path(__file__).resolve().parents[4] / "make-fnnas/qualcomm/sm8250/kernel/config/csot/verify-dtb.py"
 DTS = """/dts-v1/;
 / {
     model = "Xiaomi Mi 10 (CSOT)";

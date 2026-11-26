@@ -17,7 +17,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = (sys.argv[1] if len(sys.argv) > 1 else None) or os.environ.get("SRC_DTS") or \
       os.path.join(_HERE, "original", "sm8250-xiaomi-umi-common.dtsi")
 OUTDIR = (sys.argv[2] if len(sys.argv) > 2 else None) or os.environ.get("OUT_DIR") or \
-         os.path.join(_HERE, "..", "..", "..", "make-fnos", "kernel", "dts")
+         os.path.join(_HERE, "..", "..", "..", "make-fnnas/qualcomm/sm8250", "kernel", "dts")
 
 if not os.path.isfile(SRC):
     sys.exit(f"[X] 找不到原始设备树: {SRC}\n"

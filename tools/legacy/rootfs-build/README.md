@@ -1,4 +1,4 @@
-# fnos-xiaomi-umi / rootfs-build — 小米 10 (umi) 底层系统移植包
+# FnNAS 小米 10（UMI）历史 Debian / Armbian 构建
 
 继承自 `misaka-link/umi-linux` 的 `armbian/build` umi 板级配置 + 设备树 + BSP 脚本 + 镜像定制。
 **目标内核**：Linux **6.18.60 LTS**（上游 Commit SHA：`f45ed76d6791cf72ff1265ee93511175bbbc2f18`）。
@@ -12,13 +12,13 @@
 
 ```
 config/boards/xiaomi-umi.conf                     板级配置（family / 内核 / cmdline / BSP 钩子）
-../../../make-fnos/kernel/dts/
+../../../make-fnnas/qualcomm/sm8250/kernel/dts/
     sm8250-xiaomi-umi-common.dtsi                 主设备树（已修复，含 USB OTG）
     sm8250-xiaomi-umi-csot.dts                    CSOT 面板变体（本机是这种）
     sm8250-xiaomi-umi-sms.dts                     三星面板变体
 packages/bsp/xiaomi-umi/
     zz-update-abl-kernel                          内核升级后重建 ABL boot 镜像
-../../../make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/
+../../../make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/
 userpatches/
     extensions/umi-usb-host.sh                    打开 USB host 内核选项（关键：USB_ROLE_SWITCH）
     extensions/umi-firstboot.sh                   兼容旧构建参数的空扩展

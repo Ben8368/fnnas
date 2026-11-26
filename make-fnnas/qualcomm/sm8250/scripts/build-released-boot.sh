@@ -6,8 +6,8 @@ usage() {
 }
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then usage; exit 0; fi
 if (($# < 4)); then usage >&2; exit 2; fi
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
-source "$repo/make-fnos/kernel/source.sh"
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
+source "$repo/make-fnnas/qualcomm/sm8250/kernel/source.sh"
 boot=$(realpath -e -- "$1")
 root=$(realpath -e -- "$2")
 uuid=$3
@@ -23,12 +23,12 @@ mkdir -p -- "$parent"
 scratch=$(mktemp -d -- "$parent/.umi-boot.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 result=$scratch/output
-bash "$repo/refnos" kernel fetch "$result/kernel" "$@"
+"${FNOS_PYTHON:-python3}" "$repo/make-fnnas/qualcomm/sm8250/scripts/kernel-release.py" fetch "$result/kernel" "$@"
 krel=$(< "$result/kernel/include/config/kernel.release")
 unpack_bootimg --boot_img "$boot" --out "$scratch/donor"
-UMI_ROOT_UUID="$uuid" bash "$repo/make-fnos/scripts/build-initramfs.sh" \
+UMI_ROOT_UUID="$uuid" bash "$repo/make-fnnas/qualcomm/sm8250/scripts/build-initramfs.sh" \
     "$scratch/donor/ramdisk" "$result/kernel" "$krel" "$root" "$scratch/initramfs" "$scratch/initrd.img"
-bash "$repo/make-fnos/scripts/build-boot.sh" "$boot" "$result/kernel" "$scratch/initrd.img" "$uuid" "$result/boot"
+bash "$repo/make-fnnas/qualcomm/sm8250/scripts/build-boot.sh" "$boot" "$result/kernel" "$scratch/initrd.img" "$uuid" "$result/boot"
 mv -Tn -- "$result" "$work"
 [[ ! -e $result ]] || { echo "Output already exists: $work" >&2; exit 1; }
 printf 'Umi boot output: %s\n' "$work/boot"

@@ -26,8 +26,8 @@ runs:
         LIBGUESTFS_BACKEND: direct
         LIBGUESTFS_BACKEND_SETTINGS: force_tcg
       run: |
-        refnos="$GITHUB_ACTION_PATH/../../../refnos"
-        bash "$refnos" inspect "$INPUT_IMAGE" --output "$INPUT_OUTPUT" --sha256 "$INPUT_SHA256"
+        renas="$GITHUB_ACTION_PATH/../../../renas"
+        bash "$renas" -b xiaomi-umi inspect "$INPUT_IMAGE" --output "$INPUT_OUTPUT" --sha256 "$INPUT_SHA256"
         if [[ -n $INPUT_ROOTFS_ARCHIVE ]]; then
-          bash "$refnos" extract "$INPUT_IMAGE" "$INPUT_ROOTFS_ARCHIVE" --sha256 "$INPUT_SHA256"
+          bash "$renas" -b xiaomi-umi extract "$INPUT_IMAGE" "$INPUT_ROOTFS_ARCHIVE" --sha256 "$INPUT_SHA256"
         fi

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Exercise the upstream priority policy without fetching Linux.
 set -euo pipefail
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
-source "$repo/make-fnos/kernel/source.sh"
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../../.." && pwd)
+source "$repo/make-fnnas/qualcomm/sm8250/kernel/source.sh"
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 linux=$work/linux

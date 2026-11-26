@@ -40,7 +40,7 @@ if [[ $profile != lab-* && $with_debian == true ]]; then
     fetch "$archive"
 fi
 # The project builders verify source revisions and baseline SHA-256 before use.
-bash rekernel-umi "$work/$boot" "$work/kernel"
+bash rekernel -b xiaomi-umi "$work/$boot" "$work/kernel"
 kernel_out=$work/kernel/kernel-out
 if [[ $profile == lab-* ]]; then kernel_out=$work/kernel/csot-out; fi
 install -m644 "$kernel_out/kernel-source.tsv" "$work/evidence/kernel-source.tsv"
@@ -54,9 +54,9 @@ if [[ $profile != lab-* && $with_debian == true ]]; then
     make -s -C "$work/kernel/linux" O="$work/kernel/kernel-out" ARCH=arm64 \
         CROSS_COMPILE=aarch64-linux-gnu- INSTALL_HDR_PATH="$work/headers" headers_install
     aarch64-linux-gnu-gcc -Wall -Wextra -Werror -O2 -static -I"$work/headers/include" \
-        -o "$work/umi-gpu-check" make-fnos/boot/abl-android-v2/tools/umi-gpu-check.c
+        -o "$work/umi-gpu-check" make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/umi-gpu-check.c
     boot_name=boot-umi-csot-${CSOT_REFRESH}hz-$version.img
-    python3 -B make-fnos/boot/abl-android-v2/tools/make-ram-probe.py "$images/$boot_name" \
+    python3 -B make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/make-ram-probe.py "$images/$boot_name" \
         "$work/evidence/ram-probe-$boot_name" --gpu-check "$work/umi-gpu-check"
     install -m644 "$images/$boot_name" "$work/evidence/"
     cp "$images/SHA256SUMS.txt" "$work/assembly/dpkg-audit.txt" "$work/kernel/kernel-out/display-source.sha" "$work/kernel/kernel-config.diff" "$work/evidence/"
@@ -80,5 +80,5 @@ if [[ $profile != lab-* && ${PACKAGE_UMI_KERNEL:-false} == true ]]; then
         rm -f "$module_root/lib/modules/$krel/build" "$module_root/lib/modules/$krel/source"
         depmod -b "$module_root" "$krel"
     fi
-    python3 -B make-fnos/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence"
+    python3 -B make-fnnas/qualcomm/sm8250/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence"
 fi

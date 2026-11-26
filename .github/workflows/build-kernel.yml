@@ -4,7 +4,11 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-kernel.yml'
-      - 'make-fnos/**'
+      - 'make-fnnas/qualcomm/sm8250/**'
+      - 'make-fnnas/boards/xiaomi-umi.yml'
+      - 'make-fnnas/fnnas-files/different-files/xiaomi-umi/**'
+      - 'make-fnnas/fnnas-files/platform-files/qualcomm/**'
+      - 'rekernel'
       - 'rekernel-umi'
       - 'tools/**'
   workflow_dispatch:

@@ -24,7 +24,7 @@ export MSYS_NO_PATHCONV=1
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REL="$(cd "$DIR/.." && pwd)"
 REPO="$(cd "$REL/../.." && pwd)"
-TOOLS="$REPO/make-fnos/boot/abl-android-v2/tools"
+TOOLS="$REPO/make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools"
 
 DTS="${DTS:-$REL/dtb/slim-ovf-wifi6-gpu-oc-final.dts}"
 BASE="${1:-$REL/boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img}"

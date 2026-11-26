@@ -6,7 +6,7 @@ if (($# != 4 && $# != 6)) || ((EUID != 0)); then
     exit 2
 fi
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
-source "$repo/make-fnos/kernel/source.sh"
+source "$repo/make-fnnas/qualcomm/sm8250/kernel/source.sh"
 boot=$(realpath -e -- "$1")
 archive=$(realpath -e -- "$2")
 source_dir=$(realpath -e -- "$3")
@@ -89,8 +89,8 @@ install -Dm644 "$kdir/System.map" "$p_image/boot/System.map-$new"
 install -Dm644 "$kdir/.config" "$p_image/boot/config-$new"
 umi_uuid=$(cat /proc/sys/kernel/random/uuid)
 export UMI_ROOT_UUID=$umi_uuid
-bash "$repo/make-fnos/scripts/build-initramfs.sh" main-boot/ramdisk "$p_image" "$new" "$root" "$work/initramfs" "$work/initrd.img"
-bash "$repo/make-fnos/scripts/build-boot.sh" "$boot" "$kdir" "$work/initrd.img" "$umi_uuid" "$work/boot-build" "${dtbo_check[@]}"
+bash "$repo/make-fnnas/qualcomm/sm8250/scripts/build-initramfs.sh" main-boot/ramdisk "$p_image" "$new" "$root" "$work/initramfs" "$work/initrd.img"
+bash "$repo/make-fnnas/qualcomm/sm8250/scripts/build-boot.sh" "$boot" "$kdir" "$work/initrd.img" "$umi_uuid" "$work/boot-build" "${dtbo_check[@]}"
 install -Dm644 "$work/initrd.img" "$p_image/boot/initrd.img-$new"
 ln -s "vmlinuz-$new" "$p_image/boot/Image"
 ln -s "boot/vmlinuz-$new" "$p_image/vmlinuz"
@@ -102,7 +102,7 @@ package() {
     local name=$1 staging=$2 ver
     ver=$(awk -v name="$name" '$1==name {print $2}' main-packages.tsv)
     test -n "$ver"
-    bash "$repo/make-fnos/kernel/packaging/build-deb.sh" \
+    bash "$repo/make-fnnas/qualcomm/sm8250/kernel/packaging/build-deb.sh" \
         "$name" "$ver+umi$version.1" "$staging" "$root/tmp/$name.deb"
 }
 # The baseline archive omits /tmp. Ordinary users and apt need a sticky, writable directory.
@@ -124,7 +124,7 @@ sed -i "s/^rootdev=UUID=.*/rootdev=UUID=$umi_uuid/" "$root/boot/armbianEnv.txt"
 
 # Preserve legacy userspace, but replace the baseline login/gadget policy with this branch's.
 port=$repo/tools/legacy/rootfs-build
-overlay=$repo/make-fnos/fnos-files/different-files/xiaomi-umi/rootfs
+overlay=$repo/make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs
 systemctl --root="$root" disable usb-gadget-umi.service
 rm -f "$root/etc/systemd/system/usb-gadget-umi.service"
 # Redirect the inherited diagnostics and manual recovery unit to the new transport.
@@ -196,9 +196,9 @@ rm -f -- "$root/var/lib/systemd/random-seed"
 test "$(stat -c %a "$root/tmp")" = 1777
 
 img="$out/rootfs-umi-csot-${rate}hz-$version.img"
-bash "$repo/make-fnos/scripts/assemble-rootfs.sh" "$root" ext4 "$umi_uuid" "$img"
+bash "$repo/make-fnnas/qualcomm/sm8250/scripts/assemble-rootfs.sh" "$root" ext4 "$umi_uuid" "$img"
 debugfs -R 'cat /etc/fstab' "$img" 2>/dev/null | grep -F "UUID=$umi_uuid / ext4"
 boot_name=boot-umi-csot-${rate}hz-$version.img
 cp "$work/boot-build/$boot_name" "$out/"
-bash "$repo/make-fnos/scripts/verify-release.sh" "$out/$boot_name" "$img" "$kdir"
+bash "$repo/make-fnnas/qualcomm/sm8250/scripts/verify-release.sh" "$out/$boot_name" "$img" "$kdir"
 (cd "$out"; sha256sum ./*.img > SHA256SUMS.txt; sha256sum -c SHA256SUMS.txt)

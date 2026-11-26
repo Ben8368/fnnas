@@ -8,8 +8,8 @@
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-kernel="$SRC/../../../make-fnos/kernel"
-overlay="$SRC/../../../make-fnos/fnos-files/different-files/xiaomi-umi/rootfs"
+kernel="$SRC/../../../make-fnnas/qualcomm/sm8250/kernel"
+overlay="$SRC/../../../make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs"
 DEST="${1:-../armbian/build}"
 
 if [ ! -d "$DEST" ]; then

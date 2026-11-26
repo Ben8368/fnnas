@@ -3,7 +3,7 @@
 > 目标产物：**无桌面、带 Docker、GPU 已启用、电池已启用、CSOT 原生显示**的 Debian/Armbian 底层镜像（供后续 fnOS 用户态适配）
 > 目标内核：**Linux 6.18.60 LTS**（上游 Commit SHA：`f45ed76d6791cf72ff1265ee93511175bbbc2f18`，仓库：`https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git`）
 
-官方底包审计与原生 fnOS 组装规划见[构建入口](../../../make-fnos/README.md)。
+官方底包审计与原生 fnOS 组装规划见[构建入口](../../../make-fnnas/qualcomm/sm8250/README.md)。
 
 ## 保留 `main` 发布版能力的整镜像重建（推荐用于换内核）
 
@@ -22,7 +22,7 @@ sudo apt install git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-
     mkbootimg cpio initramfs-tools kmod pigz qemu-user-static e2fsprogs dpkg-dev zstd btrfs-progs rsync
 
 export CSOT_REFRESH=60       # 或 90；每档使用独立的新工作目录
-UMI_KERNEL_VERSION=locked ./rekernel-umi /path/to/main-boot.img "$HOME/umi-kernel-61860"
+UMI_KERNEL_VERSION=locked ./rekernel -b xiaomi-umi /path/to/main-boot.img "$HOME/umi-kernel-61860"
 sudo unshare --mount --propagation private bash tools/legacy/rootfs-build/assemble-release.sh /path/to/main-boot.img /path/to/main-rootfs.tar.gz \
     "$HOME/umi-kernel-61860" /var/tmp/umi-image-61860
 ```
@@ -49,11 +49,11 @@ WSL 也可一步执行 `CSOT_REFRESH=90 bash tools/legacy/rootfs-build/build-in-
 手动打开 `with_debian_baseline` 后，发布档位还会拉取固定 Debian 归档，重建并校验
 配套 Boot 与 ext4 镜像。构建日志和验证信息用 Actions artifact 保存 7 天。
 
-`build-fnos.yml` 的官方底包流程见 [fnOS 构建说明](../../../make-fnos/README.md)。
+`build-fnos.yml` 的官方底包流程见 [fnOS 构建说明](../../../make-fnnas/qualcomm/sm8250/README.md)。
 
 ## CSOT 实验内核与跨环境构建
 
-默认发布仅复用显示；有线 PD/PPS、NFC 等移植见 [CSOT 实验配置](../../../make-fnos/kernel/config/csot/README.md)。
+默认发布仅复用显示；有线 PD/PPS、NFC 等移植见 [CSOT 实验配置](../../../make-fnnas/qualcomm/sm8250/kernel/config/csot/README.md)。
 Linux x86-64 使用主机 `cc` 运行保护测试，另用 `aarch64-linux-gnu-gcc` 编译目标；不要把目标编译器设为主机 `CC`。
 Windows 通过 WSL2 的 Linux 文件系统构建；源码输入可从 `/mnt/c` 读取，但内核工作目录和输出放 `~/`。保持 Shell 文件为 LF。
 macOS/Colima 用 Linux 来宾的原生卷，不把 macOS 共享目录当内核对象目录。先核对来宾架构和工具链；本仓库未验证 Colima 的 fnOS 产物。

@@ -1,22 +1,14 @@
-# fnos-xiaomi-umi —— 小米 10（umi）原生飞牛系统（fnOS）适配项目
+# FnNAS Qualcomm SM8250 · 小米 10（UMI）
 
-> **目标设备**：Xiaomi Mi 10（代号 `umi`，Qualcomm Snapdragon 865 / SM8250，A-only 分区）
-> **目标系统**：**飞牛私有云（fnOS）**（基于 Debian 的 ARM64 原生 NAS 系统，非虚拟机、非 chroot）
-> **内核基线**：**Linux 6.18.60 LTS**（上游 Commit `f45ed76d6791cf72ff1265ee93511175bbbc2f18`）
-> **主仓库**：<https://github.com/Ben8368/fnnas>　｜　**适配来源**：<https://github.com/Ben8368/fnos-xiaomi-umi>　｜　**许可**：[GPL-2.0-only](LICENSE.umi)　｜　**出处声明**：[NOTICE](NOTICE.md)
+本页记录 FnNAS 对 Qualcomm SM8250 的适配。首个目标设备为小米 10，板级 ID 为 `xiaomi-umi`，手机代号为 `umi`。有关 Amlogic、Allwinner 和 Rockchip 的安装与构建，请参阅 [FnNAS 中文主文档](README.cn.md)。
 
-**当前构建已适配 CSOT 原生显示**。默认 1080×2340 @ 60Hz，`CSOT_REFRESH=90` 构建 90Hz 版；小米 10 CSOT 真机的两个配置均已通过 Fastboot RAM 启动并看到横屏日志。显示适配参考 [`colorgarden/umi-mainline`](https://github.com/colorgarden/umi-mainline)。当前发布产物是 Debian 底层镜像，尚未集成 fnOS 专有用户态。见[构建命令](tools/legacy/rootfs-build/BUILD.md)和[真机显示记录](make-fnos/kernel/config/csot/README.md#fnos-ram-boot-on-2026-11-25)。
+`Ben8368/fnnas` 的 `main` 跟随 `ophub/fnnas`，UMI 开发位于 `codex/qualcomm-sm8250`。通过 `renas -b xiaomi-umi` 处理镜像，通过 `rekernel -b xiaomi-umi` 查询和编译 Linux `6.18.y`。`locked` 用于复现 `6.18.60`。[FnNAS 许可证](LICENSE) · [源码与版权声明](NOTICE.md)
 
 ---
 
-## 📌 项目说明与源码声明
+## 项目与源码来源
 
-本项目旨在参考 [`oneder32/fnos-k20pro-raphael`](https://github.com/oneder32/fnos-k20pro-raphael) 的手机端原生 NAS 适配方案，为 **小米 10（`umi`）** 适配并运行 **飞牛系统（fnOS，基于 Debian 的 NAS 系统）**，彻底移除 Android，将手机硬件能力用于原生 Linux / NAS 场景。
-
-### 源码来源与独立性声明
-
-- **起点源码来源**：本仓库初始代码与硬件适配基线来自 [`misaka-link/umi-linux`](https://github.com/misaka-link/umi-linux)（`v2026-09-27` 开源版本）。
-- **独立演进策略**：我们将该版本最新源码作为 `fnos-xiaomi-umi` 的独立起点，**不再跟随原仓库作者更新，也不与上游仓库建立 Git 绑定/追踪关系**。
+UMI 适配来自 `Ben8368/fnos-xiaomi-umi`，硬件与引导基线来自 `misaka-link/umi-linux` 的 `v2026-09-27`。适配代码沿用 FnNAS 的目录和构建入口，并保留小米 10 的 ABL v2、DTBO、内核及 initramfs 处理逻辑。[适配来源](https://github.com/Ben8368/fnos-xiaomi-umi) · [硬件基线](https://github.com/misaka-link/umi-linux/releases/tag/v2026-09-27)
 
 ### 核心参考项目
 
@@ -31,15 +23,14 @@
 
 ## 原生 fnOS 适配架构
 
-官方 fnOS ARM64 原始镜像提供 Debian 用户态与 `/usr/trim` 服务。构建借鉴 [FnNAS renas](https://github.com/ophub/fnnas/blob/main/renas) 的只读底包与
-Common → Platform → Different 三层覆盖。小米 10 使用独立的 SM8250 内核、DTB、initramfs 和 ABL v2 启动链。
+`renas -b xiaomi-umi` 支持官方 ARM64 底包审计和 RootFS 提取。经审查的覆盖文件按 SM8250 平台、小米 10 机型的顺序应用。镜像组装从已准备的 RootFS 出发，使用已发布的 UMI 内核和同版模块生成 ABL v2 Boot 与 RootFS 配套镜像。[构建命令](docs/03-自行构建.md)
 
 当前 Debian 基线使用 ext4。原生 fnOS 的目标文件系统等底包审计和升级兼容性验证后确定。
 ```
 上电 → BootROM / XBL → 小米 ABL（需已解锁 BootLoader）
   │
   ├──→ boot 分区   （Android boot header v2）
-  │       ├─ Linux 6.18 LTS 内核（目标 6.18.60，含 qcom,kona 适配补丁）
+  │       ├─ Linux 6.18.y 内核（含 qcom,kona 适配补丁）
   │       ├─ umi DTB（带 __symbols__ 与 /abl_ovf 锚点树，仅 CSOT 原生面板）
   │       └─ initramfs（挂载根分区 + 手机启用层注入：模块 / 固件 / 高通服务）
   │
@@ -52,9 +43,10 @@ Common → Platform → Different 三层覆盖。小米 10 使用独立的 SM825
 
 ### 当前进度与状态区分
 
-- **✅ 当前发布配置**：Linux 6.18.60、CSOT 原生显示（60/90 Hz 独立构建）、电池与充电区间控制、WiFi、USB NCM/ACM、GPU、Venus 和 Docker。60/90 Hz 显示均有 CSOT 真机 RAM 启动记录；充电等常规硬件能力继承自 Debian 基线。
-- **🧪 可选实验内核（`lab-60` / `lab-90`）**：已适配有线固定 PD、BQ25970 PPS 充电路径及其 30 秒硬件 watchdog 驱动、SN100T NFC（Linux NFC/NCI）。实验 profile 不打包 rootfs，也不属于默认发布镜像；PD/PPS 保护、watchdog 超时恢复和 NFC 仍需在目标 fnOS 系统上分别验收。细节见[实验配置记录](make-fnos/kernel/config/csot/README.md)。
-- **🚧 fnOS 系统集成**：目前发布的是 Debian 底层镜像，fnOS 专有用户态、`/usr/trim` 服务及 WebUI 尚未集成。
+- **Debian 复现基线**采用 Linux `6.18.60`，支持 1080×2340 CSOT 60 Hz 和 90 Hz 两种独立构建。两档均有 RAM 启动记录。电池与充电区间控制、WiFi、USB NCM/ACM、GPU、Venus 和 Docker 的验证范围见下文。[真机显示记录](make-fnnas/qualcomm/sm8250/kernel/config/csot/README.md#fnos-ram-boot-on-2026-11-25)
+- **Linux `6.18.65` 候选**于 2026-11-26 在 CSOT 60 Hz 设备上进行 RAM 探针测试，确认进入 PID 1、USB ACM 出现及 1080×2340 @ 60 Hz 显示状态。记录属于 RAM 探针验收。[真机无刷写验收](docs/04-真机无刷写验收.md)
+- **🧪 可选实验内核（`lab-60` / `lab-90`）**：已适配有线固定 PD、BQ25970 PPS 充电路径及其 30 秒硬件 watchdog 驱动、SN100T NFC（Linux NFC/NCI）。实验 profile 不打包 rootfs，也不属于默认发布镜像；PD/PPS 保护、watchdog 超时恢复和 NFC 仍需在目标 fnOS 系统上分别验收。细节见[实验配置记录](make-fnnas/qualcomm/sm8250/kernel/config/csot/README.md)。
+- **fnOS 系统集成**已具备底包审计、RootFS 提取和样本组装入口。官方底包的 SHA-256 尚待补齐，Btrfs 子卷、首次启动、WebUI 和 OTA 仍待真实底包和真机验证。[底包审计与组装](make-fnnas/qualcomm/sm8250/README.md)
 
 ---
 
@@ -143,28 +135,30 @@ modemst1  modemst2  fsg  fsc  persist  mdm1m9kefs1  mdm1m9kefs2  mdm1m9kefs3
 fnnas/
 ├── .github/actions/prepare-fnos-base/action.yml
 ├── .github/workflows/{build-fnos.yml,build-kernel.yml,ci.yml}
-├── make-fnos/
-│   ├── fnos-files/
-│   │   ├── common-files/
+├── make-fnnas/
+│   ├── boards/xiaomi-umi.yml
+│   ├── fnnas-files/
 │   │   ├── platform-files/qualcomm/sm8250/
 │   │   └── different-files/xiaomi-umi/
-│   ├── kernel/{config,patches/sm8250-6.18,dts,packaging}/
-│   ├── boot/abl-android-v2/{baseline,overlays,tools,tests}/
-│   ├── scripts/
-│   ├── boards/xiaomi-umi.yml
-│   ├── sources/fnos-arm64.lock
-│   └── README.umi.md
+│   └── qualcomm/sm8250/
+│       ├── kernel/{config,patches/sm8250-6.18,dts,packaging}/
+│       ├── boot/abl-android-v2/{baseline,overlays,tools,tests}/
+│       ├── scripts/
+│       └── sources/fnos-arm64.lock
+├── renas
+├── rekernel
 ├── refnos
 ├── rekernel-umi
 ├── tools/                            # tools/legacy/ 存放旧版复现入口
 ├── docs/
 ├── out/                              # 本地报告和工作产物
-├── LICENSE.umi
+├── LICENSE
 ├── NOTICE.md
 └── README.umi.md
 ```
 
-[原生 fnOS 构建目录与审计说明](make-fnos/README.md)记录了底包来源、层级及组装边界。
+[原生 fnOS 构建目录与审计说明](make-fnnas/qualcomm/sm8250/README.md)记录了底包来源、层级及组装边界。
+用 `./renas -b xiaomi-umi --help` 查看镜像操作，用 `./rekernel -b xiaomi-umi query` 查询可编译的 Linux 源码版本。
 现有 Debian 60/90 Hz 镜像按[基线构建指南](tools/legacy/rootfs-build/BUILD.md)复现，
 2026-09-27 Boot 复现命令见[历史 Boot 构建记录](tools/legacy/boot-build/BUILD.md)。
 
@@ -176,7 +170,7 @@ fnnas/
 |---|---|
 | [`docs/01-快速开始.md`](docs/01-快速开始.md) | 刷机前检查与备份、刷 tools/legacy/boot/dtbo/rootfs、首启安全加固与验收清单 |
 | [`docs/02-使用指南.md`](docs/02-使用指南.md) | USB 串口/网卡、WiFi 配置、充电上限、GPU 频率、Venus 硬编解与故障排查 |
-| [`docs/03-自行构建.md`](docs/03-自行构建.md) | 重建 boot、从零构建 rootfs、内核 6.18 LTS（`6.18.60`）切换与 fnOS 适配构建说明 |
+| [`docs/03-自行构建.md`](docs/03-自行构建.md) | 统一入口、6.18.y 选版、镜像组装和历史构建 |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | 本地检查、提交规范与 PR 验收记录 |
 | [`docs/04-发布与下载.md`](docs/04-发布与下载.md) | Release 产物清单、拆分、校验与发布流程 |
 | [`docs/RELEASE-NOTES.md`](docs/RELEASE-NOTES.md) | GitHub Release 正文模板 |
@@ -186,7 +180,7 @@ fnnas/
 
 ## 六、下载说明
 
-当前仓库已提供 CSOT 原生显示的 Debian 底层构建流程，但尚未发布集成 fnOS 专有用户态的 `fnos-xiaomi-umi` 成品镜像。
+FnNAS Fork 已提供 CSOT Debian 基线的复现流程。UMI 发布内核包和原生 fnOS 成品状态见 [发布与下载](docs/04-发布与下载.md)。
 
 - 仓库内大体积二进制镜像（`tools/legacy/boot/*.img`、`tools/legacy/rootfs/*.tar.gz`）不进 Git，后续发布使用 [FnNAS Fork 的 Releases](https://github.com/Ben8368/fnnas/releases)。导入前的产物见 [UMI 来源仓库的 Releases](https://github.com/Ben8368/fnos-xiaomi-umi/releases)
 - 如需先体验本项目所继承的纯 Debian 13 基线成品镜像（`v2026-09-27`），可参见原基线发布页 [`misaka-link/umi-linux` Releases](https://github.com/misaka-link/umi-linux/releases/tag/v2026-09-27) 及 [`tools/legacy/boot/README.md`](tools/legacy/boot/README.md)、[`tools/legacy/rootfs/README.md`](tools/legacy/rootfs/README.md)。

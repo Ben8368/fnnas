@@ -16,7 +16,7 @@ SCRIPT="${1:-}"
 if [ -z "$SCRIPT" ]; then
 	# 优先测试仓库的设备层配置。
 	for cand in \
-		"$HERE/../../../../make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/bin/battery-charge-limit" \
+		"$HERE/../../../../make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/usr/local/bin/battery-charge-limit" \
 		"$HERE/../sources/armbian-umi-port/userpatches/overlay/usr/local/bin/battery-charge-limit" \
 		"$HERE/../userpatches/overlay/usr/local/bin/battery-charge-limit" \
 		"$HERE/userpatches/overlay/usr/local/bin/battery-charge-limit" \
