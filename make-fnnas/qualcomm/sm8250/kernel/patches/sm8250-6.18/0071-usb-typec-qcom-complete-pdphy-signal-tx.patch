@@ -1,0 +1,24 @@
+Subject: [PATCH] usb: typec: qcom: Complete PD PHY signal transmission
+
+TCPM waits for a completion after transmitting a hard reset signal. The
+PD PHY reports the transmission through sig-tx, separate from msg-tx.
+Complete it on sig-tx so TCPM can continue without timing out.
+
+diff --git a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_pdphy.c b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_pdphy.c
+index abb9d0321..82f094775 100644
+--- a/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_pdphy.c
++++ b/drivers/usb/typec/tcpm/qcom/qcom_pmic_typec_pdphy.c
+@@ -376,11 +376,11 @@ static irqreturn_t qcom_pmic_typec_pdphy_isr(int irq, void *dev_id)
+ {
+ 	struct pmic_typec_pdphy_irq_data *irq_data = dev_id;
+ 	struct pmic_typec_pdphy *pmic_typec_pdphy = irq_data->pmic_typec_pdphy;
+-	struct device *dev = pmic_typec_pdphy->dev;
+ 
+ 	switch (irq_data->virq) {
+ 	case PMIC_PDPHY_SIG_TX_IRQ:
+-		dev_err(dev, "isr: tx_sig\n");
++		tcpm_pd_transmit_complete(pmic_typec_pdphy->tcpm_port,
++					  TCPC_TX_SUCCESS);
+ 		break;
+ 	case PMIC_PDPHY_SIG_RX_IRQ:
+ 		schedule_work(&pmic_typec_pdphy->reset_work);
