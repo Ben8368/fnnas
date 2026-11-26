@@ -3,13 +3,13 @@
 </div>
 <br />
 
-[English Instructions](README.md) | [中文说明](README.cn.md) | [小米 10（UMI）](README.umi.md)
+[English Instructions](README.md) | [中文说明](README.cn.md) | [小米 10（UMI）](./docs/qualcomm/sm8250/xiaomi-umi/README.md)
 
 [FnNAS](https://fnnas.com/) 是一款基于最新 Linux 内核（Debian 发行版）深度定制的操作系统。它具备出色的硬件兼容能力，全面支持主流 x86 及 Arm64 设备，支持用户自主组建 NAS 并灵活扩展外部存储。现在，您可以轻松将电视盒子的 Android TV 系统替换为 FnNAS，将其打造为一台功能强大的私有数据存储服务器。
 
 本项目得益于众多 [贡献者](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/CONTRIBUTORS.md) 的持续贡献，并在 FnNAS 官方技术专家的指导下，为搭载 `Amlogic`、`Rockchip` 和 `Allwinner` 芯片的电视盒子构建了 Arm64 架构适配的 FnNAS 系统。构建版本完整继承了官方系统的全部功能，支持写入 eMMC 启动以及内核在线更新。最新固件请前往 [⬇️Releases](https://github.com/ophub/fnnas/releases) 页面下载。欢迎 `Fork` 本项目进行个性化定制。如果本项目对您有所帮助，请点击仓库右上角的 `⭐Star` 以示支持！
 
-此 Fork 在 `codex/qualcomm-sm8250` 开发 Qualcomm SM8250 的小米 10 适配。镜像操作使用 `renas -b xiaomi-umi`，Linux 6.18.y 内核构建使用 `rekernel -b xiaomi-umi`。当前可复现 Debian 基线，fnOS 用户态仍在集成中。[机型文档](README.umi.md) · [构建指南](docs/03-自行构建.md)
+此 Fork 在 `codex/qualcomm-sm8250` 开发 Qualcomm SM8250 的小米 10 适配。镜像操作使用 `renas -b xiaomi-umi`，Linux 6.18.y 内核构建使用 `rekernel -b xiaomi-umi`。当前可复现 Debian 基线，fnOS 用户态仍在集成中。[机型文档](./docs/qualcomm/sm8250/xiaomi-umi/README.md) · [构建指南](./docs/qualcomm/sm8250/xiaomi-umi/03-自行构建.md)
 
 ## FnNAS 固件默认信息
 
@@ -20,7 +20,7 @@
 
 ## 支持的设备列表
 
-⬆️ 晶晨、瑞芯微和全志的型号按各自平台的 SoC 性能排列。高通 SM8250 一并列出当前验证状态。
+⬆️ 按上游原有顺序列出 Amlogic、Rockchip、Allwinner 各平台内的 SoC 性能排行；Qualcomm SM8250 单列于表末，展示本 Fork 的适配状态，不与上游平台跨厂商比较。
 
 | SoC  | [设备](https://github.com/ophub/fnnas/releases) | [内核](https://github.com/ophub/fnnas) |
 | ---- | ---- | ---- |
@@ -50,14 +50,14 @@
 | rk3318 | [RX3318-Box](https://github.com/ophub/amlogic-s9xxx-armbian/pull/2129) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
 | h618 | [OrangePi-Zero3](https://github.com/ophub/fnnas/issues/158), [H618-DevBoard(PCDN)](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3479), [Vontar-h618](https://github.com/ophub/fnnas/issues/525), [BT-100M](https://github.com/ophub/fnnas/issues/525), [BT-1000M](https://github.com/ophub/fnnas/issues/525), [PaiNet-P3](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3485), [PaiNet-P5](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3577), [X98H](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3434), [X98H-100MiB](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3717), [AI-Douhe](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3556), [CJDS](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3652), [YDZY-box](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3786) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
 | h6 | [Vplus](https://github.com/ophub/amlogic-s9xxx-armbian/issues/1100), [Tanix-TX6](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3534), [TX6-H](https://github.com/ophub/amlogic-s9xxx-armbian/issues/3528), [T95-max](https://github.com/ophub/fnnas/issues/546), [TQC-A01](https://github.com/ophub/amlogic-s9xxx-armbian/pull/1638) | [fnnas](https://github.com/ophub/fnnas/releases/tag/kernel_fnnas) |
-| SM8250（高通） | [小米 10（UMI）](README.umi.md)，CSOT 已验证 RAM 启动，原生 fnOS 集成中 | [Linux 6.18.y](make-fnnas/qualcomm/sm8250/README.md#umi-内核选版) |
+| SM8250（高通） | [小米 10（UMI）](./docs/qualcomm/sm8250/xiaomi-umi/README.md)，CSOT 已验证 RAM 启动，原生 fnOS 集成中 | [Linux 6.18.y](make-fnnas/qualcomm/sm8250/README.md#umi-内核选版) |
 
 > [!TIP]
 > 目前 [s905 系列的盒子](https://github.com/ophub/amlogic-s9xxx-armbian/issues/1173)仅支持从 `TF/SD/USB` 启动使用，其他型号的盒子均支持写入 `eMMC` 运行。更多信息请查阅 [✅支持的设备列表说明](make-fnnas/fnnas-files/common-files/etc/model_database.conf)。如需添加新设备，可参考说明文档 12.15 章节的方法[✳️添加新的支持设备](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/documents/README.cn.md#1215-如何添加新的支持设备)。
 
 ## 安装及升级 FnNAS 的相关说明
 
-请选择与设备型号对应的 FnNAS 镜像。小米 10 走 Android ABL v2 启动链，请参阅 [UMI 真机无刷写验收](docs/04-真机无刷写验收.md)。
+请选择与设备型号对应的 FnNAS 镜像。小米 10 走 Android ABL v2 启动链，请参阅 [UMI 真机无刷写验收](./docs/qualcomm/sm8250/xiaomi-umi/04-真机无刷写验收.md)。
 
 - ### 安装 FnNAS 到 eMMC
 

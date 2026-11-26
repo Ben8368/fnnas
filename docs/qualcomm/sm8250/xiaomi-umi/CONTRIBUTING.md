@@ -1,6 +1,6 @@
 # 贡献指南
 
-先读 [FnNAS 主文档](../README.cn.md)、[小米 10 适配](../README.umi.md)和[许可与出处](../NOTICE.md)。修改 Boot、内核或 RootFS 时，按[自行构建](03-自行构建.md)选择对应流程。
+先读 [FnNAS 主文档](../../../../README.cn.md)、[小米 10 适配](./README.md)和[许可与出处](../../../../NOTICE.md)。修改 Boot、内核或 RootFS 时，按[自行构建](./03-自行构建.md)选择对应流程。
 
 ## 本地检查
 
@@ -20,7 +20,7 @@ bash tools/ci-check.sh
 FNOS_PYTHON=/usr/bin/python3 /usr/bin/python3 -B -m unittest discover -v -s make-fnnas/qualcomm/sm8250/scripts/tests
 ```
 
-测试会在临时目录生成 ext4 和 Btrfs 磁盘样本，并检查审计前后的输入 SHA-256。发布候选底包的核验方式见[镜像审计说明](../make-fnnas/qualcomm/sm8250/README.md#pr-0--官方底包审计)。
+测试会在临时目录生成 ext4 和 Btrfs 磁盘样本，并检查审计前后的输入 SHA-256。发布候选底包的核验方式见[镜像审计说明](../../../../make-fnnas/qualcomm/sm8250/README.md#pr-0--官方底包审计)。
 
 ## 提交与 Pull Request
 
@@ -30,5 +30,5 @@ FNOS_PYTHON=/usr/bin/python3 /usr/bin/python3 -B -m unittest discover -v -s make
 UMI 适配的提交标题采用 Conventional Commits，格式为 `type(scope): summary`，其中 `scope` 可省略。常见示例有 `fix(display): preserve CSOT backlight state`、`ci: validate device tree fixtures` 和 `docs: clarify serial enrollment`。
 
 - 在 PR 中说明改动目的、影响的构建档位、执行过的命令和结果。涉及 boot、内核或设备树时，注明面板、内核版本及实际验证范围。
-- 需要验证真机引导时，优先按[真机无刷写验收](04-真机无刷写验收.md)走 RAM 启动。提交日志前移除设备序列号、账号和密钥，并注明哪些功能仍待真机验证。
-- 引用第三方代码或硬件资料时，保留原有版权、SPDX 标记和许可证文本，并在 [NOTICE](../NOTICE.md) 记录来源。仓库根目录使用 FnNAS 的 [LICENSE](../LICENSE)。请勿提交厂商固件、设备分区备份或访问凭据。
+- 需要验证真机引导时，优先按[真机无刷写验收](./04-真机无刷写验收.md)走 RAM 启动。提交日志前移除设备序列号、账号和密钥，并注明哪些功能仍待真机验证。
+- 引用第三方代码或硬件资料时，保留原有版权、SPDX 标记和许可证文本，并在 [NOTICE](../../../../NOTICE.md) 记录来源。仓库根目录使用 FnNAS 的 [LICENSE](../../../../LICENSE)。请勿提交厂商固件、设备分区备份或访问凭据。

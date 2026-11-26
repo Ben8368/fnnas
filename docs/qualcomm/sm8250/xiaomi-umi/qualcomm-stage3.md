@@ -8,7 +8,7 @@
 
 ## 内核真机验收与提升
 
-1. 下载 `umi-<profile>-<RunID>-<Attempt>` Actions artifact 并保存摘要。不用历史探针或相似版本替代本次构建。运行 `bash make-fnnas/qualcomm/sm8250/scripts/acceptance-probe.sh DONOR_BOOT KERNEL_PACKAGE NEW_PROBE.img`。产生的镜像仅供 RAM 启动；核对该探针的 DTB 与**设备当前** DTBO 的 preflight 再运行，参见 [无刷写验收](04-真机无刷写验收.md)。设备没有恢复 Android、无法取得当次 USB 报告、或 overlay 校验失败，都不能提升。探针 PID 1 不挂载 Android 数据分区。
+1. 下载 `umi-<profile>-<RunID>-<Attempt>` Actions artifact 并保存摘要。不用历史探针或相似版本替代本次构建。运行 `bash make-fnnas/qualcomm/sm8250/scripts/acceptance-probe.sh DONOR_BOOT KERNEL_PACKAGE NEW_PROBE.img`。产生的镜像仅供 RAM 启动；核对该探针的 DTB 与**设备当前** DTBO 的 preflight 再运行，参见 [无刷写验收](./04-真机无刷写验收.md)。设备没有恢复 Android、无法取得当次 USB 报告、或 overlay 校验失败，都不能提升。探针 PID 1 不挂载 Android 数据分区。
 2. 收集未经合成的当次 USB 报告、面板/DTBO 核对结果、Probe SHA-256，以及恢复 Android 的 `sys.boot_completed=1`。将实际观测到的恢复结果记为 `Android sys.boot_completed=1` 行；报告应含 `UMI_PROBE: PID1 kernel=...`、`UMI_PROBE: artifact_sha256=...` 和 `UMI_PROBE_REPORT_END`。去除设备序列号等个人标识，再对最终报告计算 SHA-256。
 3. 验收 JSON 包含 `source_commit`、`linux_commit`、`profile`、整数 `run_id`、整数 `run_attempt`、`package_sha256`、`evidence_sha256`、`operator`、`tested_at`，以及 `device: "xiaomi-umi"`、`scope: "kernel"`、`method: "fastboot-boot"`、`result: "pass"`。维护者需人工审查报告；工具核对身份与字节，不能独立证明物理观测真伪。
 
@@ -44,4 +44,4 @@ sudo bash renas -b xiaomi-umi -k 6.18.60 -a false native \
 
 PR 主题按顺序：`pr/qualcomm-routing`（通用参数/Action 路由）、`pr/qualcomm-base-audit`（只读底包解析与审计）、`pr/qualcomm-sm8250`（板级文件、内核和 ABL），每个自干净的 `upstream/main` 或已接受前置 PR 起步。Fork CI、发布门禁及历史验证日志留在开发仓库，不作为通用上游功能。本次提交按功能分开；不把整个开发分支用作上游 PR。签名 URL、专有 fnOS 用户态、DTBO、固件以及历史 Debian 成品均不得混入上游源码 PR。
 
-Armbian 补丁保留原始作者和随附 GPL 文本；对本地适配单独记录。MiSeed 快照含 GPL-2.0-only 驱动与独立 AGPL-3.0-only 工具/救援程序；在 PR 中拆分、逐文件校验拷贝及生成内容，不把 AGPL-only C 并入 GPL-2.0-only 内核。当前 `apply_display_port.py` 是独立构建工具，不能据此推断其生成内容或整份快照都可重许可。最终发布内核前需要对应源码/配置和完整许可归属检查；底包与 GPU/无线固件另按厂商条款处理。参见 [NOTICE](../NOTICE.md)。
+Armbian 补丁保留原始作者和随附 GPL 文本；对本地适配单独记录。MiSeed 快照含 GPL-2.0-only 驱动与独立 AGPL-3.0-only 工具/救援程序；在 PR 中拆分、逐文件校验拷贝及生成内容，不把 AGPL-only C 并入 GPL-2.0-only 内核。当前 `apply_display_port.py` 是独立构建工具，不能据此推断其生成内容或整份快照都可重许可。最终发布内核前需要对应源码/配置和完整许可归属检查；底包与 GPU/无线固件另按厂商条款处理。参见 [NOTICE](../../../../NOTICE.md)。

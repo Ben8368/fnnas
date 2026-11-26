@@ -1,6 +1,6 @@
 # FnNAS Qualcomm SM8250 构建
 
-使用 `renas -b xiaomi-umi` 处理镜像，使用 `rekernel -b xiaomi-umi` 选择并编译内核。本目录提供 Qualcomm SM8250 的 ABL v2、内核、底包审计和组装实现。操作示例见 [UMI 构建指南](../../../docs/03-自行构建.md)。
+使用 `renas -b xiaomi-umi` 处理镜像，使用 `rekernel -b xiaomi-umi` 选择并编译内核。本目录提供 Qualcomm SM8250 的 ABL v2、内核、底包审计和组装实现。操作示例见 [UMI 构建指南](../../../docs/qualcomm/sm8250/xiaomi-umi/03-自行构建.md)。
 
 | 路径 | 职责 |
 | --- | --- |
@@ -14,5 +14,5 @@
 旧版 Debian/Armbian 构建和发布材料集中在 [tools/legacy/](../../../tools/legacy/)，供复现和硬件回归。
 CSOT 构建配置位于 `kernel/config/csot/`，固定源码快照位于 `sources/`。
 
-[第三阶段运行与验收](../../../docs/qualcomm-stage3.md) 说明旁路 CI、Linux 6.18.y、公开锁定底包、本地提升及原生镜像组装。
+[第三阶段运行与验收](../../../docs/qualcomm/sm8250/xiaomi-umi/qualcomm-stage3.md) 说明旁路 CI、Linux 6.18.y、公开锁定底包、本地提升及原生镜像组装。
 历史 Debian 根文件系统只用于复现，不用于原生 fnOS。

@@ -79,8 +79,8 @@ adb shell cat /sys/class/power_supply/*/name
 
 ## 相关文档
 
-- [项目主页](../../../README.umi.md) — 项目主页（能力矩阵 / 启动链 / 做了什么）
-- [`../docs/02-使用指南.md`](../../../docs/02-使用指南.md) — 刷完怎么用（WiFi / 串口 / 充电上限 / GPU）
-- [`../docs/03-自行构建.md`](../../../docs/03-自行构建.md) — 构建总指南（含 boot 链）
+- [项目主页](../../../docs/qualcomm/sm8250/xiaomi-umi/README.md) — 项目主页（能力矩阵 / 启动链 / 做了什么）
+- [`../docs/qualcomm/sm8250/xiaomi-umi/02-使用指南.md`](../../../docs/qualcomm/sm8250/xiaomi-umi/02-使用指南.md) — 刷完怎么用（WiFi / 串口 / 充电上限 / GPU）
+- [`../docs/qualcomm/sm8250/xiaomi-umi/03-自行构建.md`](../../../docs/qualcomm/sm8250/xiaomi-umi/03-自行构建.md) — 构建总指南（含 boot 链）
 - [BUILD.md](BUILD.md) — 本构建包的完整参数说明与 16 项改动对照
 - [wsl-setup.md](wsl-setup.md) — 在 Windows 上用 WSL2 搭构建环境

@@ -7,11 +7,11 @@
 | `umi-system-opensource-2026-09-27.tar.gz` | 2,123,920,669 B（1.98 GiB） | `51f4b38d23b71d7d70b7472b3ef95e673c0e984f1f7c489c75305fc4fb2d645f` |
 
 > ⚠️ **大体积镜像不在 git 仓库里**（2 GB 二进制必须走 Release 附件，仓库附件的单文件上限是 2 GiB）。
-> 见 [`../docs/04-发布与下载.md`](../../../docs/04-发布与下载.md)。
+> 见 [`../docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md`](../../../docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md)。
 
 ## 获取起点基线镜像（源自 `misaka-link/umi-linux`）
 
-> 注：本项目计划后续替换为 **fnOS ARM64**（参考 `oneder32/fnos-k20pro-raphael`）适配镜像；如需先获取起点 Debian 13 基线镜像，可从原基线仓库下载：
+> 注：本目录归档的是历史 Debian 13 基线；当前 fnOS ARM64 原生集成以 FnNAS 上游结构和构建入口为基础，进度与约束见 [UMI 机型文档](../../../docs/qualcomm/sm8250/xiaomi-umi/README.md)。
 
 ```bash
 curl -LO https://github.com/misaka-link/umi-linux/releases/download/v2026-09-27/umi-system-opensource-2026-09-27.tar.gz
@@ -30,7 +30,7 @@ sha256sum -c ../SHA256SUMS.txt     # 相关行应显示 OK
 bash tools/restore-system-opensource.sh
 ```
 
-完整刷机流程见 [`../docs/01-快速开始.md`](../../../docs/01-快速开始.md)。
+完整刷机流程见 [`../docs/qualcomm/sm8250/xiaomi-umi/01-快速开始.md`](../../../docs/qualcomm/sm8250/xiaomi-umi/01-快速开始.md)。
 
 ## 里面是什么
 

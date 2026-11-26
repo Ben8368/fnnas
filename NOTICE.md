@@ -15,10 +15,9 @@
 
 - Xiaomi UMI 的硬件适配与引导基线来自 `misaka-link/umi-linux` 的 `v2026-09-27`，保留其 `Copyright (C) 2026 misaka-link` 声明及 GPL v2 条款。[基线发布](https://github.com/misaka-link/umi-linux/releases/tag/v2026-09-27)
 
-### 1.3 核心适配架构参考
+### 1.3 核心适配架构来源
 
-- [`oneder32/fnos-k20pro-raphael`](https://github.com/oneder32/fnos-k20pro-raphael)：参考其在高通骁龙手机（Redmi K20 Pro / SM8150）上原生适配 **飞牛系统（fnOS ARM64）** 的引导链组织、initramfs 手机启用层与根文件系统适配方案。
-- Qualcomm 适配已接入 FnNAS 的 `make-fnnas` 目录及 `renas`、`rekernel` 构建入口。
+- Qualcomm SM8250 的项目结构、平台接入方式及构建入口直接对齐 FnNAS 上游 [`ophub/fnnas`](https://github.com/ophub/fnnas)，并在本 Fork 的 `make-fnnas`、`renas` 和 `rekernel` 中实现小米 10（UMI）板级适配。
 
 ### 1.4 内核与硬件参考仓库
 
@@ -44,7 +43,7 @@
 | UMI 板级移植与构建脚本 | `make-fnnas/qualcomm/sm8250/` 中的构建脚本、`tools/legacy/rootfs-build/`、`tools/legacy/boot-build/build-boot.sh` 和 `tools/*.sh` | 源自 `misaka-link/umi-linux` 基线，由适配项目继续维护 | GPL v2，逐文件声明优先 |
 | 系统服务与脚本 | `battery-charge-limit`、`umi-venus-enable`、`wifi-connect.sh`、`umi-gpu-maxfreq` 等 | 源自 `misaka-link/umi-linux` 基线并由本项目继续维护 | **GPL-2.0** |
 | UMI CI 工作流 | `build-fnos.yml`、`build-kernel.yml`、`ci.yml` | 本项目原创 | **GPL-2.0** |
-| UMI 专用文档 | `README.umi.md`、`docs/` | 继承 `misaka-link/umi-linux` 的硬件与引导资料，现按 FnNAS 目录维护 | GPL v2 |
+| UMI 专用文档 | `docs/qualcomm/sm8250/xiaomi-umi/` | 继承 `misaka-link/umi-linux` 的硬件与引导资料，现按 FnNAS 目录维护 | GPL v2 |
 | Mesa / Turnip / Freedreno | 镜像内（不在仓库） | freedreno 上游 | MIT 系 |
 | QCA6390 固件 | 镜像内（不在仓库） | `kvalo/ath11k-firmware` / linux-firmware | 见其自带许可 |
 | Debian / fnOS 用户态组件 | 未来 fnOS 适配镜像内 | Debian 项目 / 飞牛私有云（fnOS）官方 ARM64 底包 | 各自开源许可 / 专有组件许可 |

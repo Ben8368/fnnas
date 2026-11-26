@@ -35,7 +35,7 @@ sudo unshare --mount --propagation private bash tools/legacy/rootfs-build/assemb
 
 发行版保留 Wi-Fi、GPU、Venus 的板级设置并接入原生显示和 ABL overlay 隔离。由于基线 ADSP 未启用，发行版同时停用依赖其时钟的板载音频节点。FTS 触屏尚未接入驱动，其专用 I2C 控制器也保持停用。
 
-WSL 也可一步执行 `CSOT_REFRESH=90 bash tools/legacy/rootfs-build/build-in-wsl.sh MAIN_BOOT MAIN_ROOTFS_TAR NEW_WORK_DIR`。已知本机原厂 DTBO 表和实际索引时，末尾追加 `ANDROID_DTBO_TABLE INDEX`；会检查 overlay 可应用，且隔离节点外的树不变。不读取或写入手机，不包含原厂 DTBO。见[无刷写验收](../../../docs/04-真机无刷写验收.md)。
+WSL 也可一步执行 `CSOT_REFRESH=90 bash tools/legacy/rootfs-build/build-in-wsl.sh MAIN_BOOT MAIN_ROOTFS_TAR NEW_WORK_DIR`。已知本机原厂 DTBO 表和实际索引时，末尾追加 `ANDROID_DTBO_TABLE INDEX`；会检查 overlay 可应用，且隔离节点外的树不变。不读取或写入手机，不包含原厂 DTBO。见[无刷写验收](../../../docs/qualcomm/sm8250/xiaomi-umi/04-真机无刷写验收.md)。
 
 ---
 
@@ -232,7 +232,7 @@ fastboot reboot
 | **休眠挂起** | 已 mask | `customize-image.sh` |
 | **上手说明** | `/root/README-mi10.md` | `customize-image.sh` |
 
-登录流程见下一节。使用继承的 `v2026-09-27` 镜像时，按 [旧基线的账号与密码说明](../../../docs/01-快速开始.md#31-先说清楚这个镜像里有哪些账号)操作。
+登录流程见下一节。使用继承的 `v2026-09-27` 镜像时，按 [旧基线的账号与密码说明](../../../docs/qualcomm/sm8250/xiaomi-umi/01-快速开始.md#31-先说清楚这个镜像里有哪些账号)操作。
 
 ---
 

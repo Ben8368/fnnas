@@ -12,7 +12,7 @@
 #
 #  前置:
 #     · 装好 gh（GitHub CLI）并 gh auth login
-#     · 已重算 SHA256SUMS.txt（见 docs/04-发布与下载.md §三）
+#     · 已重算 SHA256SUMS.txt（见 docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md §三）
 #     · 若单个附件 > 2 GiB，先跑 tools/split-for-release.sh 拆分
 #
 #  做的事:
@@ -34,7 +34,7 @@ TITLE="${TITLE:-fnos-xiaomi-umi $TAG}"
 BOOT="$REL/boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img"
 ROOTFS="$REL/rootfs/umi-system-opensource-2026-09-27.tar.gz"
 SUMS="$REL/SHA256SUMS.txt"
-NOTES="$DIR/../docs/RELEASE-NOTES.md"
+NOTES="$DIR/../docs/qualcomm/sm8250/xiaomi-umi/RELEASE-NOTES.md"
 
 BOOT_SHA="a7e4d341e35a663683bf41a8fe99d472bc6b8568aa1b54b05901dc7e9f2d842a"
 ROOTFS_SHA="51f4b38d23b71d7d70b7472b3ef95e673c0e984f1f7c489c75305fc4fb2d645f"
@@ -60,7 +60,7 @@ check_sha() {
         echo "  ✗ $name  sha256 不一致！"
         echo "      期望 $want"
         echo "      实际 $got"
-        echo "      若你确实改过内容，请同步更新本脚本里的常量与 docs/04-发布与下载.md"
+        echo "      若你确实改过内容，请同步更新本脚本里的常量与 docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md"
         return 1
     fi
 }
@@ -73,7 +73,7 @@ for f in "$BOOT" "$ROOTFS"; do
     if [ "$sz" -gt "$GITHUB_ASSET_LIMIT" ]; then
         die "$(basename "$f") 有 $((sz/1024/1024)) MiB，超过 GitHub 单附件 2 GiB 上限。
   请先拆分：bash tools/split-for-release.sh \"$f\"
-  并按 docs/04-发布与下载.md 的说明改为上传分片。"
+  并按 docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md 的说明改为上传分片。"
     fi
 done
 echo "  ✓ 尺寸都在 GitHub 单附件上限内（rootfs 余量 $(( (GITHUB_ASSET_LIMIT - $(stat -c%s "$ROOTFS")) /1024/1024 )) MiB）"
@@ -87,7 +87,7 @@ cat <<EOF
     $(basename "$BOOT")      ($(stat -c%s "$BOOT") B)
     $(basename "$ROOTFS")    ($(stat -c%s "$ROOTFS") B)
     SHA256SUMS.txt
-  说明文件: docs/RELEASE-NOTES.md
+  说明文件: docs/qualcomm/sm8250/xiaomi-umi/RELEASE-NOTES.md
 EOF
 
 if [ "$CONFIRM" != "--yes" ]; then

@@ -7,7 +7,7 @@
 | `boot-umi-csot-ovf-wifi6-gpu-oc-final.img` | 28,209,152 B | `a7e4d341e35a663683bf41a8fe99d472bc6b8568aa1b54b05901dc7e9f2d842a` |
 
 > ⚠️ **大体积镜像不在 git 仓库里**（二进制走 GitHub Releases，仓库只放源码/文档/脚本）。
-> 见 [`../docs/04-发布与下载.md`](../../../docs/04-发布与下载.md)。
+> 见 [`../docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md`](../../../docs/qualcomm/sm8250/xiaomi-umi/04-发布与下载.md)。
 
 ## 获取起点基线镜像（源自 `misaka-link/umi-linux`）
 
