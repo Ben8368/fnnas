@@ -2,7 +2,7 @@
 # Build a kernel and optionally the Debian baseline on a disposable Ubuntu runner.
 set -euo pipefail
 profile=${1:?release, csot-60 or csot-90}
-with_debian=${WITH_DEBIAN_BASELINE:-true}
+with_debian=${WITH_DEBIAN_BASELINE:-false}
 case $profile in release|csot-60|csot-90|lab-60|lab-90) ;; *) exit 2 ;; esac
 work=$(realpath -m -- "${2:?new native work directory}")
 mkdir -- "$work"
@@ -40,7 +40,7 @@ if [[ $profile != lab-* && $with_debian == true ]]; then
     fetch "$archive"
 fi
 # The project builders verify source revisions and baseline SHA-256 before use.
-bash rekernel -b xiaomi-umi "$work/$boot" "$work/kernel"
+UMI_PATCH_MANIFEST="$work/evidence/armbian-patches.tsv" bash rekernel -b xiaomi-umi "$work/$boot" "$work/kernel"
 kernel_out=$work/kernel/kernel-out
 if [[ $profile == lab-* ]]; then kernel_out=$work/kernel/csot-out; fi
 install -m644 "$kernel_out/kernel-source.tsv" "$work/evidence/kernel-source.tsv"
@@ -80,5 +80,6 @@ if [[ $profile != lab-* && ${PACKAGE_UMI_KERNEL:-false} == true ]]; then
         rm -f "$module_root/lib/modules/$krel/build" "$module_root/lib/modules/$krel/source"
         depmod -b "$module_root" "$krel"
     fi
-    python3 -B make-fnnas/qualcomm/sm8250/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence"
+    python3 -B make-fnnas/qualcomm/sm8250/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence" \
+        --profile "$profile" --source "$(< "$work/evidence/project.sha")"
 fi

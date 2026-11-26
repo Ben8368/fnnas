@@ -49,7 +49,7 @@ panel.write_bytes(driver.replace(old_brightness, new_brightness))
 if not lab:
     # The generic board lacks the shipped WiFi PMU, Venus/GPU OPPs and ramoops.
     # Extend the exact release DTS instead of regressing unrelated hardware.
-    release = here.parents[3] / 'tools/legacy/dtb/slim-ovf-wifi6-gpu-oc-final.dts'
+    release = here.parents[4] / 'tools/legacy/dtb/slim-ovf-wifi6-gpu-oc-final.dts'
     baseline = work / 'release-check.dtb'
     subprocess.run(['dtc', '-q', '-@', '-I', 'dts', '-O', 'dtb', '-o', baseline, release], check=True)
     if baseline.read_bytes() != (work / 'main-boot/dtb').read_bytes():

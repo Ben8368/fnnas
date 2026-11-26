@@ -10,27 +10,12 @@ on:
       - 'make-fnnas/fnnas-files/platform-files/qualcomm/**'
       - 'rekernel'
       - 'rekernel-umi'
-      - 'tools/**'
-  workflow_dispatch:
-    inputs:
-      profile:
-        description: Kernel profile
-        type: choice
-        options: [release, csot-60, csot-90, lab-60, lab-90]
-        default: release
-      kernel_version:
-        description: Linux 6.18.y source (auto, locked, or 6.18.x)
-        type: string
-        default: locked
-      with_debian_baseline:
-        description: Also rebuild the historical Debian image pair (release profiles)
-        type: boolean
-        default: false
+      - 'tools/ci-build.sh'
 
 permissions:
   contents: read
 concurrency:
-  group: kernel-${{ github.ref }}-${{ inputs.profile || 'release' }}
+  group: kernel-${{ github.ref }}-${{ vars.UMI_KERNEL_PROFILE || 'release' }}
   cancel-in-progress: true
 
 jobs:
@@ -38,9 +23,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
-      PROFILE: ${{ inputs.profile || 'release' }}
-      WITH_DEBIAN_BASELINE: ${{ inputs.with_debian_baseline || false }}
-      UMI_KERNEL_VERSION: ${{ inputs.kernel_version || 'locked' }}
+      PROFILE: ${{ vars.UMI_KERNEL_PROFILE || 'release' }}
+      WITH_DEBIAN_BASELINE: 'false'
+      UMI_KERNEL_VERSION: ${{ vars.UMI_KERNEL_VERSION || 'locked' }}
       PACKAGE_UMI_KERNEL: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,5 +50,5 @@ jobs:
           name: umi-${{ env.PROFILE }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/umi/evidence/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
           include-hidden-files: true

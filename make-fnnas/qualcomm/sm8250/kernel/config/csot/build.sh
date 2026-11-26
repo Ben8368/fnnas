@@ -89,7 +89,7 @@ if find "$out" -type f -name 'btrfs.ko*' -print -quit | grep -q .; then
 fi
 (cd "$out"; sha256sum arch/arm64/boot/Image boot-csot.dtb native-display-cmdline > SHA256SUMS)
 printf '%s\n' "$rate" > "$out/refresh"
-cp -- kernel-source.tsv "$out/"
+cp -- kernel-source.tsv armbian-patches.tsv "$out/"
 printf '%s\n' "$display_source_rev" > "$out/display-source.sha"
 if [[ $out == csot-out ]]; then printf '%s\n' "$lab_source_rev" > "$out/lab-source.sha"; fi
 if [[ $out == csot-out ]]; then

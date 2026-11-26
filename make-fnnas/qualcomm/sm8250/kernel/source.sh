@@ -46,55 +46,43 @@ resolve_umi_linux() {
     printf '%s\t%s\n' "$picked" "$candidate"
 }
 
+# Only named, reviewed omissions. A digest binds the decision to the exact patch.
 apply_umi_armbian_patches() {
-    local linux=$1 selected=$2 patches=$3 file name output path
-    local -a conflicts patch_options
-    for file in "$patches"/*.patch; do
+    local linux=$1 selected=$2 patches=$3 manifest=$4 file name sha reason status
+    local -a files
+    shopt -s nullglob
+    files=("$patches"/*.patch)
+    shopt -u nullglob
+    ((${#files[@]})) || { echo 'Empty Armbian patch series' >&2; return 1; }
+    printf 'patch\tsha256\tstatus\treason\n' > "$manifest"
+    for file in "${files[@]}"; do
         name=${file##*/}
+        sha=$(sha256sum < "$file") || return
+        sha=${sha%% *}
         printf '\n=== %s ===\n' "$name"
-        patch_options=(--batch --forward -p1)
+        reason=
         if [[ $selected != "$umi_linux_locked_commit" ]]; then
-            case $name in
-                0002-*|0009-*|0017-*|0033-*|0061-*|0062-*)
-                    # Native display uses the upstream DSI manager. Keep upstream
-                    # FastRPC, and omit the codec changes that cancel each other.
-                    echo 'Keeping the upstream driver.'
-                    continue
-                    ;;
+            case "$name:$sha" in
+                0002-drm-dsi-emit-panel-turn-on-off-signal-to-touchscreen.patch:610e0e8e19c4d376787faf485512c7805634a2a5070ab85cf2e916dda27a9619) reason='Native Umi panel does not use the Armbian touchscreen notifier' ;;
+                0009-drm-msm-dsi-change-sync-mode-to-sync-on-DSI0-rather-.patch:18a0c76656351b0bdbc645f0d6982295e208f376467499a5d36ad42b85e9fc23) reason='Native Umi uses upstream DSI synchronization' ;;
+                0017-ASoC-cs35l45-disable-power-managerment.patch:684f3026b50ccecea31e50c06bd4192d0dfa350be68903a53a5855fd9f99c09d) reason='Codec change and its revert are omitted as a pair' ;;
+                0033-Revert-ASoC-cs35l45-disable-power-managerment.patch:7760c58194e80f644aa695525db25734487b983b9caeee244f0a442780d7d9a4) reason='Codec change and its revert are omitted as a pair' ;;
+                0061-Revert-misc-fastrpc-Rename-tgid-and-pid-to-client_id.patch:ee7aad7b886281f782d0af65272f6a20d8af00633ca815e2b17255ba7ac13341) reason='Keep upstream FastRPC client identity' ;;
+                0062-Revert-misc-fastrpc-Add-support-for-multiple-PD-from.patch:1d3f411232cdf7c6b71f9a5ccfd8b44736797131339c3cef6e45ad512d0e6403) reason='Keep upstream FastRPC multi-PD support' ;;
             esac
-            # 0021 adds a separate charger and its Makefile entry has displaced
-            # context since the in-tree BQ257xx driver was added.
-            if [[ $name != 0021-* ]]; then patch_options+=(--fuzz=0); fi
-            if git -C "$linux" apply --reverse --check "$file" 2>/dev/null; then
-                echo 'Patch already present.'
-                continue
-            fi
-            if ! output=$(LC_ALL=C patch -d "$linux" --dry-run "${patch_options[@]}" < "$file" 2>&1); then
-                printf '%s\n' "$output"
-                # GNU patch reports the rejected hunks under their file header.
-                # Skip the whole patch only when every conflict is in an upstream driver edit.
-                mapfile -t conflicts < <(awk '
-                    /^checking file / { file = substr($0, 15) }
-                    /^[0-9]+ out of [0-9]+ hunks? (FAILED|ignored)/ && file != "" { print file }
-                ' <<< "$output" | sort -u)
-                if ((${#conflicts[@]} == 0)); then return 1; fi
-                if ! git -C "$linux" cat-file -e "$umi_linux_locked_commit^{commit}" 2>/dev/null; then
-                    git -C "$linux" fetch --no-tags --depth 1 -- "$umi_linux_repo" "refs/tags/v$umi_linux_locked_version" ||
-                        return 1
-                    [[ $(git -C "$linux" rev-parse 'FETCH_HEAD^{commit}') == "$umi_linux_locked_commit" ]] ||
-                        return 1
-                fi
-                for path in "${conflicts[@]}"; do
-                    case $path in drivers/*|sound/*|include/linux/*) ;; *) return 1 ;; esac
-                    if [[ -z $(git -C "$linux" diff --name-only "$umi_linux_locked_commit" "$selected" -- "$path") ]]; then
-                        echo "Patch conflict without an upstream driver change: $path" >&2
-                        return 1
-                    fi
-                done
-                echo "Keeping upstream changes and skipping $name."
-                continue
-            fi
         fi
-        patch -d "$linux" "${patch_options[@]}" < "$file" || return
+        if [[ -n $reason ]]; then
+            status=reviewed-skip
+        elif git -C "$linux" apply --reverse --check -- "$file" 2>/dev/null; then
+            status=already-present
+        elif patch -d "$linux" --dry-run --batch --forward --fuzz=0 -p1 < "$file" &&
+             patch -d "$linux" --batch --forward --fuzz=0 -p1 < "$file"; then
+            status=applied
+        else
+            printf '%s\t%s\tconflict\tUnreviewed patch failure\n' "$name" "$sha" >> "$manifest"
+            echo "Unreviewed Armbian patch conflict: $name on $selected" >&2
+            return 1
+        fi
+        printf '%s\t%s\t%s\t%s\n' "$name" "$sha" "$status" "$reason" >> "$manifest"
     done
 }

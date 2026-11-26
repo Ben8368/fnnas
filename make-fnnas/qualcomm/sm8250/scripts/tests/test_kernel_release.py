@@ -2,6 +2,7 @@
 
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -20,21 +21,33 @@ def asset(version, rate, state="uploaded"):
 
 
 class KernelReleaseTests(unittest.TestCase):
-    def test_release_selection_is_numeric_paginated_and_profile_specific(self):
-        release = {"id": 1, "draft": False, "prerelease": False}
-        first_page = [asset("6.18.99", "90"), asset("6.18.9", "60")] + [
-            {"name": f"6.18.{i}-rockchip.tar.gz"} for i in range(98)
-        ]
-        latest = asset("6.18.10", "60")
-        second_page = [latest, asset("6.18.200", "60", state="starter"),
-                       asset("6.18.201-rc1", "60"), asset("6.19.300", "60")]
-        for requested, expected, selected in [("auto", "6.18.10", latest),
-                                              ("6.18.9", "6.18.9", first_page[1])]:
-            with patch.object(kernel_release, "release_api", side_effect=[release, first_page, second_page]):
-                self.assertEqual(kernel_release.select_asset("owner/repo", "60", requested), (expected, selected))
-        with patch.object(kernel_release, "release_api", side_effect=[release, [latest]]):
-            with self.assertRaisesRegex(ValueError, "no published Umi CSOT 90 Hz kernel"):
-                kernel_release.select_asset("owner/repo", "90", "auto")
+    def test_only_accepted_releases_are_selected_numerically(self):
+        def release(version, rate="60"):
+            source = "a" * 40
+            data = {"schema": 1, "repository": "owner/repo", "branch": kernel_release.PUBLISH_BRANCH,
+                    "version": version, "profile": f"csot-{rate}", "source_commit": source,
+                    "linux_commit": "b" * 40, "patches_sha256": "c" * 64,
+                    "run_id": 42, "run_attempt": 1, "package_sha256": "d" * 64}
+            data["acceptance"] = {**data, "device": "xiaomi-umi", "scope": "kernel", "result": "pass",
+                                  "method": "fastboot-boot", "operator": "test", "tested_at": "test",
+                                  "evidence_sha256": "e" * 64}
+            return {"tag_name": kernel_release.tag_for(version, rate, source), "body": json.dumps(data),
+                    "draft": False, "prerelease": False, "assets": [
+                        {**asset(version, rate), "digest": "sha256:" + "d" * 64},
+                        {"name": "device-evidence.log", "state": "uploaded", "digest": "sha256:" + "e" * 64}]}
+
+        rejected = release("6.18.99")
+        rejected["body"] = rejected["body"].replace('"result": "pass"', '"result": "fail"')
+        with patch.object(kernel_release, "release_api", side_effect=[
+            [rejected, release("6.18.99", "90"), release("6.18.11"), release("6.18.9"), release("6.18.10")],
+            {"object": {"type": "commit", "sha": "f" * 40}}, # moved tag
+            {"object": {"type": "commit", "sha": "a" * 40}},
+            {"object": {"type": "commit", "sha": "a" * 40}},
+        ]):
+            self.assertEqual(kernel_release.select_asset("owner/repo", "60", "auto")[0], "6.18.10")
+        with patch.object(kernel_release, "release_api", return_value=[rejected]):
+            with self.assertRaisesRegex(ValueError, "no accepted"):
+                kernel_release.select_asset("owner/repo", "60", "auto")
 
     def test_package_round_trip_and_digest_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -57,17 +70,20 @@ class KernelReleaseTests(unittest.TestCase):
             (modules / module).parent.mkdir(parents=True)
             (modules / module).touch()
             info = asset(version, rate)
-            kernel_release.pack(kernel, modules, root)
+            kernel_release.pack(kernel, modules, root, "csot-90", "f" * 40)
+            provenance = {"source_commit": "f" * 40, "version": version, "profile": "csot-90",
+                          "linux_commit": "a" * 40, "patches_sha256": kernel_release.sha256(kernel / "armbian-patches.tsv")}
+            tag = kernel_release.tag_for(version, rate, "f" * 40)
             bundle = root / info["name"]
             info.update(size=bundle.stat().st_size, digest="sha256:" + kernel_release.sha256(bundle))
             with patch.object(kernel_release, "urlopen", return_value=io.BytesIO(bundle.read_bytes())):
-                kernel_release.fetch("owner/repo", version, rate, info, root / "unpacked")
+                kernel_release.fetch("owner/repo", version, rate, info, tag, provenance, root / "unpacked")
             self.assertTrue((root / "unpacked" / module).is_file())
             self.assertEqual(kernel_release.read_kernel(root / "unpacked"), (version, rate, release))
             info["digest"] = "sha256:" + "0" * 64
             with patch.object(kernel_release, "urlopen", return_value=io.BytesIO(bundle.read_bytes())):
                 with self.assertRaisesRegex(ValueError, "digest or size mismatch"):
-                    kernel_release.fetch("owner/repo", version, rate, info, root / "bad")
+                    kernel_release.fetch("owner/repo", version, rate, info, tag, provenance, root / "bad")
             self.assertFalse((root / "bad").exists())
 
 
