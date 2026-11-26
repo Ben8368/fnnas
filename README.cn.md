@@ -57,7 +57,7 @@
 
 ## 安装及升级 FnNAS 的相关说明
 
-请选择与设备型号对应的 FnNAS 镜像。小米 10 走 Android ABL v2 启动链，请参阅 [UMI 真机无刷写验收](./docs/qualcomm/sm8250/xiaomi-umi/04-真机无刷写验收.md)。
+请选择与设备型号对应的 FnNAS 镜像。小米 10 原生 fnOS 的配套镜像和安装方式见 [UMI 原生 fnOS 真机验收](./docs/qualcomm/sm8250/xiaomi-umi/03-自行构建.md#原生-fnos-真机验收)。
 
 - ### 安装 FnNAS 到 eMMC
 

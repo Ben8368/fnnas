@@ -8,6 +8,8 @@
 
 ## 内核真机验收与提升
 
+当前验收从[原生 fnOS 镜像组装与安装](./03-自行构建.md#原生-fnos-真机验收)开始。RAM 探针用于需要保留 Android 时的内核诊断。
+
 下载 `umi-<profile>-<RunID>-<Attempt>` Actions artifact 并保存摘要。验收 JSON 包含 `source_commit`、`linux_commit`、`profile`、整数 `run_id`、整数 `run_attempt`、`package_sha256`、`evidence_sha256`、`operator`、`tested_at`，以及 `device: "xiaomi-umi"`、`scope: "kernel"`、`result: "pass"`。维护者审查原始报告和设备实测结果，去除设备序列号等个人标识后对最终报告计算 SHA-256。
 
 - **原生 fnOS 上机调试**使用 `native-debug`。在维护者授权安装前，核对设备、原厂 DTBO、安装目标和镜像摘要。保留安装日志、串口内核版本与 `/etc/umi-build/kernel-candidate.json`、实际进入 Fastboot 以及从 Fastboot 回到 fnOS 的记录。验收 JSON 使用 `method: "native-fastboot-flash"`，还需整数 `dtbo_index` 以及 `dtbo_sha256`、`boot_sha256`、`rootfs_sha256`。从实际观测抄录 `UMI_NATIVE: kernel=...`、`UMI_NATIVE: artifact_sha256=...`、`UMI_NATIVE: recovery=fastboot-to-fnos`，并为四个 DTBO/镜像字段各记录一条 `UMI_NATIVE: 字段=值`。另外记录 fnOS 用户态和 OTA 的验收范围。

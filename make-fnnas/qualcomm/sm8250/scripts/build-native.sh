@@ -82,6 +82,7 @@ UMI_NATIVE_BTRFS=1 bash "$scripts/verify-release.sh" "$result/boot.img" "$result
 "$FNOS_PYTHON" -B "$scripts/native-rootfs.py" verify "$result/rootfs.img" "$kernel" "$uuid" | tee "$result/rootfs-verify.log"
 if (( debug )); then
     cp -- "$staged/etc/umi-build/stock-dtbo.txt" "$result/"
+    install -m644 "$scripts/../docs/flash-acceptance.md" "$result/FLASH.md"
 else
     cp -- "$kernel/promotion.json" "$result/$provenance"
 fi
@@ -92,6 +93,7 @@ mv -Tn -- "$result" "$output"
 [[ ! -e $result ]] || { echo "Output already exists: $output" >&2; exit 1; }
 if (( debug )); then
     printf 'Local native fnOS debug image pair (CI candidate, static checks only): %s\n' "$output"
+    printf 'Install and verify using %s/FLASH.md\n' "$output"
 else
     printf 'Unaccepted native fnOS image pair (static checks only): %s\n' "$output"
 fi

@@ -8,8 +8,9 @@ work=$(realpath -m -- "${2:?new native work directory}")
 mkdir -- "$work"
 mkdir "$work/evidence"
 exec > >(tee "$work/evidence/build.log") 2>&1
-release=https://github.com/misaka-link/umi-linux/releases/download/v2026-09-27
-boot=boot-umi-csot-ovf-wifi6-gpu-oc-final.img
+source make-fnnas/qualcomm/sm8250/kernel/source.sh
+release=${umi_boot_donor_url%/*}
+boot=${umi_boot_donor_url##*/}
 archive=umi-system-opensource-2026-09-27.tar.gz
 if [[ -n ${UMI_BASE_INPUT_DIR:-} ]]; then
     base_inputs=$(realpath -e -- "$UMI_BASE_INPUT_DIR")

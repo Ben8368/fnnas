@@ -70,12 +70,16 @@ case "${1:-}" in
         shift
         exec bash "$scripts/build-native.sh" --debug "$@"
         ;;
+    native-acceptance)
+        shift
+        exec bash "$scripts/build-acceptance.sh" "$@"
+        ;;
     build)
         shift
         exec bash "$scripts/build-image.sh" "$@"
         ;;
     -h|--help|'')
-        printf 'Usage: renas -b xiaomi-umi [-k VERSION] [-a true|false] [-r OWNER/REPO] {inspect|download|extract|kernel|overlay|boot|build|native|native-debug} --help\n'
+        printf 'Usage: renas -b xiaomi-umi [-k VERSION] [-a true|false] [-r OWNER/REPO] {inspect|download|extract|kernel|overlay|boot|build|native|native-debug|native-acceptance} --help\n'
         ;;
     *)
         printf 'Unknown Xiaomi Umi image command: %s\n' "$1" >&2

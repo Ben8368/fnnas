@@ -2,6 +2,7 @@
 umi_linux_repo=https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
 umi_linux_locked_version=6.18.60
 umi_linux_locked_commit=f45ed76d6791cf72ff1265ee93511175bbbc2f18
+umi_boot_donor_url=https://github.com/misaka-link/umi-linux/releases/download/v2026-09-27/boot-umi-csot-ovf-wifi6-gpu-oc-final.img
 umi_boot_donor_sha256=a7e4d341e35a663683bf41a8fe99d472bc6b8568aa1b54b05901dc7e9f2d842a
 
 resolve_umi_linux() {

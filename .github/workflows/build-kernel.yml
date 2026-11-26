@@ -47,6 +47,31 @@ jobs:
           test "$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')" -ge 25
       - name: Build and verify selected kernel profile
         run: bash tools/ci-build.sh "$PROFILE" "$RUNNER_TEMP/umi"
+      - name: Prepare native fnOS acceptance handoff
+        if: ${{ !startsWith(env.PROFILE, 'lab-') }}
+        run: |
+          evidence="$RUNNER_TEMP/umi/evidence"
+          packages=("$evidence/"*-qualcomm-sm8250-xiaomi-umi-csot*.tar.gz)
+          [[ ${#packages[@]} == 1 && -f ${packages[0]} ]]
+          digest=$(sha256sum < "${packages[0]}")
+          digest=${digest%% *}
+          printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$GITHUB_SHA" "$PROFILE" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$digest" \
+            > "$evidence/fnos-acceptance.tsv"
+          {
+            echo '### Native fnOS acceptance'
+            echo
+            echo 'On the Linux builder, copy this command into the checkout:'
+            echo
+            echo '```bash'
+            printf '%s %s %s %s %s %s %s\n' "printf '%s\t%s\t%s\t%s\t%s\n'" \
+              "$GITHUB_SHA" "$PROFILE" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$digest" \
+              '| ./renas -b xiaomi-umi native-acceptance /dev/stdin'
+            echo '```'
+            echo
+            printf 'The same record is in `fnos-acceptance.tsv` in `%s`.\n' \
+              "umi-$PROFILE-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Keep kernel outputs and build evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
