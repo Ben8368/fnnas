@@ -59,7 +59,10 @@ fi
 report=$scratch/base-audit
 bash "$scripts/inspect-base.sh" "$base" --sha256 locked --output "$report" --rootfs-archive "$scratch/rootfs.tar"
 staged=$scratch/staged
-tar --numeric-owner --xattrs --xattrs-include='*' --acls --selinux -xpf "$scratch/rootfs.tar" -C "$staged"
+# Keep the mountpoint. The donor's /dev entries are 0:0 placeholders and
+# the initramfs supplies the live devtmpfs before switching root.
+tar --numeric-owner --xattrs --xattrs-include='*' --acls --selinux \
+    --exclude='./dev/*' -xpf "$scratch/rootfs.tar" -C "$staged"
 rm -- "$scratch/rootfs.tar"
 uuid=$(uuidgen -r | tr '[:upper:]' '[:lower:]')
 bash "$scripts/apply-files.sh" "$staged"

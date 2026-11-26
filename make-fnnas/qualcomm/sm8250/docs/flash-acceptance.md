@@ -6,10 +6,9 @@
 
 1. 确认设备为已解锁的小米 10（Umi）CSOT，已经备份现有数据并准备了该机的恢复方案。写入 `userdata` 会覆盖原系统和数据。安装须经设备维护者确认。
 2. 确认该设备当前活动的原厂 DTBO 与 `stock-dtbo.txt` 一致。用从同一设备读回的 DTBO 核对摘要，并核对活动索引。安装只写 `boot` 和 `userdata`。
-3. 在镜像目录使用新版 Android Platform Tools。将 `SERIAL` 设为 `fastboot devices` 显示的目标设备序列号。
+3. 在镜像目录核对文件摘要。Linux 用 `sha256sum -c SHA256SUMS`，macOS 用 `shasum -a 256 -c SHA256SUMS`。使用新版 Android Platform Tools，将 `SERIAL` 设为 `fastboot devices` 显示的目标设备序列号。
 
 ```bash
-sha256sum -c SHA256SUMS
 fastboot -s "$SERIAL" getvar product
 fastboot -s "$SERIAL" getvar partition-size:boot
 fastboot -s "$SERIAL" getvar partition-size:userdata
