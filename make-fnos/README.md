@@ -9,7 +9,7 @@
 | [`sources/fnos-arm64.lock`](sources/fnos-arm64.lock) | 官方镜像来源、版本、校验值，采用 TOML |
 | [`boards/xiaomi-umi.yml`](boards/xiaomi-umi.yml) | Umi 目标板信息及待确认的 RootFS 文件系统 |
 | [`fnos-files/`](fnos-files/README.md) | Common → Qualcomm SM8250 → Xiaomi Umi 的 RootFS 文件层 |
-| [`kernel/`](kernel/) | Linux 6.18.60 配置、Umi DTB 源码、ABL 补丁、CSOT 配置和 Debian 打包工具 |
+| [`kernel/`](kernel/) | Linux 6.18.y 版本选择、Umi DTB 源码、ABL 补丁、CSOT 配置和 Debian 打包工具 |
 | [`tools/legacy/boot/abl-android-v2/`](boot/abl-android-v2/) | ABL 基线、overlay、v2 打包工具、诊断和测试 |
 | [`scripts/`](scripts/) | 获取、审计、提取、覆盖、构建、组装和校验 |
 
@@ -19,6 +19,39 @@ CSOT 构建配置位于 `kernel/config/csot/`，固定源码快照位于 `source
 GitHub Actions 的 `ci.yml` 运行仓库检查，`build-kernel.yml` 构建 Umi 内核并可手动选择复现 Debian，
 `build-fnos.yml` 使用官方底包锁和仓库密钥 `FNOS_SIGNED_URL` 执行审计与提取。
 复合 Action [`.github/actions/prepare-fnos-base`](../.github/actions/prepare-fnos-base/action.yml) 可在安装了 libguestfs 的 Linux runner 上审计本地镜像，并可选导出 RootFS tar。
+
+## Umi 内核选版
+
+`Build Umi kernel` 和本地 `rekernel-umi` 默认查询 Linux Stable 最新的 `6.18.y` 正式标签。
+可选择 `locked` 复现 `6.18.60`，也可填写具体的 `6.18.x`。构建记录实际版本和源码提交，
+并用 Umi 配置和 DTB 检查验证候选版本。
+
+构建新版本时保留 Linux Stable 的 DSI 和 FastRPC 驱动。Armbian 补丁已被合入时跳过，
+仅与上游驱动改动冲突时保留上游实现并记录跳过的补丁。Umi 专用适配或设备树出现冲突时构建会失败，
+供确认上游改动是否已覆盖板级需求。
+
+```bash
+./rekernel-umi query
+./rekernel-umi /path/to/donor-boot.img /path/to/new-kernel-work
+```
+
+`release`、`csot-60`、`csot-90` 构建会生成含 Image、DTB 和同版模块的候选附件。
+需要准备真机测试用的 Boot 和 RAM probe 时，可在构建中启用 `with_debian_baseline`。
+真机验证该附件后，在默认分支上手动运行 `Publish verified Umi kernel`，填写对应的
+构建 Run ID、Attempt 和 Profile。工作流将附件发布到 [`kernel_fnnas`](https://github.com/Ben8368/fnnas/releases/tag/kernel_fnnas)，
+同一版本和刷新率的附件不会被覆盖。
+
+镜像侧默认取 Release 中对应刷新率的最新已发布内核。用 `--version 6.18.x` 可指定已发布的版本，
+用 `--repo OWNER/REPO` 可指定其他发布仓库。在发布首个对应刷新率的内核包之前，查询会报出缺失信息。
+
+```bash
+./refnos kernel query --refresh 90
+./refnos kernel fetch out/umi-kernel --refresh 90
+./refnos boot /path/to/donor-boot.img /path/to/prepared-rootfs "$ROOT_UUID" out/umi-boot --refresh 90
+```
+
+`refnos boot` 在工作目录的 `boot/` 生成 Android v2 Boot 镜像，`kernel/lib/modules/` 含
+同版模块，用于组装配套的 RootFS。构建 RootFS 镜像时使用相同的 `ROOT_UUID`。
 
 ## PR 0 · 官方底包审计
 
@@ -57,7 +90,7 @@ FNOS_PYTHON=/usr/bin/python3 ./refnos inspect /path/to/fnos-arm64.img \
 | `inspect-base.sh` | 生成分区、子卷、软件包和服务审计报告 |
 | `extract-rootfs.sh` | 只读导出已校验的 ARM64 RootFS 为 tar，保留数字 UID/GID、ACL 和扩展属性 |
 | `apply-files.sh` | 将 Common → SM8250 → Xiaomi Umi 依序复制到独立的 RootFS 工作目录 |
-| `build-kernel.sh` | 从固定内核与已校验的 Umi Boot 基线构建内核、模块和 DTB，入口为 `rekernel-umi` |
+| `build-kernel.sh` | 以选定的 Linux Stable 版本和已校验的 Umi Boot 基线构建内核、模块和 DTB，入口为 `rekernel-umi` |
 | `build-initramfs.sh` | 用同版本模块和指定 RootFS 中的固件重建 Umi 基线 initramfs |
 | `build-boot.sh` | 打包内核、DTB、initramfs 和 RootFS UUID，生成 Android Boot Header v2 镜像 |
 | `assemble-rootfs.sh` | 使用明确指定的 ext4 或 Btrfs 格式，将已准备的工作树组装为新镜像 |

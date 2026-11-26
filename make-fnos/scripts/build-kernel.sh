@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Build the 6.18.60 kernel against the configuration embedded in the main release.
+# Build Linux Stable with the configuration embedded in the Umi boot donor.
 set -euo pipefail
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/make-fnos/kernel/source.sh"
 if (($# != 2)); then
     echo "Usage: $0 MAIN_BOOT_IMG NEW_LINUX_WORK_DIR" >&2
     exit 2
@@ -10,19 +11,23 @@ fi
 boot=$(realpath -e -- "$1")
 work=$(realpath -m -- "$2")
 case "$work" in /mnt/*) echo 'Use a native Linux filesystem for kernel builds.' >&2; exit 2 ;; esac
-printf '%s  %s\n' a7e4d341e35a663683bf41a8fe99d472bc6b8568aa1b54b05901dc7e9f2d842a "$boot" | sha256sum -c -
+printf '%s  %s\n' "$umi_boot_donor_sha256" "$boot" | sha256sum -c -
+linux_source=$(resolve_umi_linux "${UMI_KERNEL_VERSION:-auto}")
+read -r linux_version linux_commit <<< "$linux_source"
 mkdir -- "$work"
 cd -- "$work"
-linux_commit=f45ed76d6791cf72ff1265ee93511175bbbc2f18
+printf 'Building Linux v%s (%s)\n' "$linux_version" "$linux_commit"
 
-# KERNEL_BUNDLE permits an offline checkout from a previously fetched, identical source.
+# With UMI_KERNEL_VERSION=locked, KERNEL_BUNDLE permits an offline checkout.
 if [[ -n ${KERNEL_BUNDLE:-} ]]; then
-    git clone -- "$KERNEL_BUNDLE" linux
+    git clone --no-checkout -- "$KERNEL_BUNDLE" linux
+    git -C linux checkout --detach "$linux_commit"
 else
-    git clone --depth 1 --branch v6.18.60 -- \
-        https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git linux
+    git clone --depth 1 --branch "v$linux_version" -- "$umi_linux_repo" linux
 fi
 test "$(git -C linux rev-parse HEAD)" = "$linux_commit"
+test "$(make -s -C linux kernelversion)" = "$linux_version"
+printf '%s\n' "$linux_source" > kernel-source.tsv
 unpack_bootimg --boot_img "$boot" --out main-boot
 gzip -dc main-boot/kernel > main-boot/Image
 linux/scripts/extract-ikconfig main-boot/Image > main-boot/kernel.config
@@ -33,12 +38,7 @@ cmp -- main-boot/kernel.config "$locked_config" || {
 }
 armbian_patches=$repo/make-fnos/sources/armbian-34f4924/patch/kernel/archive/sm8250-6.18
 test -d "$armbian_patches"
-for f in "$armbian_patches"/*.patch; do
-    printf '\n=== %s ===\n' "${f##*/}"
-    # 0021's Makefile context overlaps a new in-tree BQ257xx driver; GNU patch
-    # accepts displaced/context-changed hunks but exits nonzero on any reject.
-    patch -d linux --batch --forward -p1 < "$f"
-done
+apply_umi_armbian_patches "$work/linux" "$linux_commit" "$armbian_patches"
 port="$repo/make-fnos/kernel"
 git -C linux apply --exclude=drivers/soc/qcom/ubwc_config.c "$port/patches/sm8250-6.18/0070-umi-match-abl-kona.patch"
 cp "$port"/dts/* linux/arch/arm64/boot/dts/qcom/

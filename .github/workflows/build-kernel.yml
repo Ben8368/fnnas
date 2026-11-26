@@ -14,6 +14,10 @@ on:
         type: choice
         options: [release, csot-60, csot-90, lab-60, lab-90]
         default: release
+      kernel_version:
+        description: Linux 6.18.y source (auto, locked, or 6.18.x)
+        type: string
+        default: auto
       with_debian_baseline:
         description: Also rebuild the historical Debian image pair (release profiles)
         type: boolean
@@ -32,6 +36,8 @@ jobs:
     env:
       PROFILE: ${{ inputs.profile || 'release' }}
       WITH_DEBIAN_BASELINE: ${{ inputs.with_debian_baseline || false }}
+      UMI_KERNEL_VERSION: ${{ inputs.kernel_version || 'auto' }}
+      PACKAGE_UMI_KERNEL: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

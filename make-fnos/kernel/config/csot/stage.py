@@ -7,6 +7,7 @@ from pathlib import Path
 here = Path(__file__).resolve().parent
 work = Path(sys.argv[1]).resolve()
 linux = work / 'linux'
+linux_rev = (work / 'kernel-source.tsv').read_text().split()[1]
 inputs = work / 'board-lab-inputs'
 board = linux / 'arch/arm64/boot/dts/qcom'
 csot = board / 'sm8250-xiaomi-umi-csot.dts'

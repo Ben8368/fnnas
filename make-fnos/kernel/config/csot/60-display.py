@@ -35,7 +35,7 @@ subprocess.run(['git', '-C', linux, 'restore', '--source=HEAD', '--',
 # The source stager expects its board entry. Keep it separate from fnOS.
 copy2(source / 'kernel/umi-csot.dts', board)
 subprocess.run([sys.executable, source / 'tools/apply_display_port.py',
-                '--source', linux, '--native'], check=True)
+                '--source', linux, '--native', '--expected-revision', linux_rev], check=True)
 
 # The CSOT vendor DTS specifies MSB first for the two-byte DCS brightness.
 panel = linux / 'drivers/gpu/drm/panel/panel-xiaomi-umi-csot.c'

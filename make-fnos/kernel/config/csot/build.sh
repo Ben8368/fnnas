@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Internal entry point; build-release-kernel.sh prepares a fresh, pinned tree.
+# Internal entry point; build-kernel.sh prepares and verifies a fresh tree.
 set -euo pipefail
 if (($# != 1)); then
     echo "Usage: $0 NEW_LINUX_WORK_DIR" >&2
@@ -27,7 +27,7 @@ case $CSOT_LAB in
     *) echo 'CSOT_LAB must be 0 or 1' >&2; exit 2 ;;
 esac
 test -d "$display_source/kernel" && test -d "$display_source/tools" && test -d "$display_source/tests"
-linux_rev=f45ed76d6791cf72ff1265ee93511175bbbc2f18
+read -r linux_version linux_rev < kernel-source.tsv
 test "$(git -C linux rev-parse HEAD)" = "$linux_rev"
 command -v cc >/dev/null || { echo 'Host C compiler required for the panel harness' >&2; exit 1; }
 mkdir "$out" display-inputs
@@ -82,12 +82,14 @@ make -C linux O="$work/$out" LOCALVERSION="$localversion" -j"${JOBS:-$(nproc)}" 
 python3 "$here/verify-dtb.py" "$dtb" "$rate" "$CSOT_LAB" "$rx_profile"
 python3 "$here/abl-display.py" "$dtb" "$out/boot-csot.dtb" display-inputs/kernel/umi-csot-dtbo-targets.txt main-boot/dtb
 make -C linux O="$work/$out" LOCALVERSION="$localversion" -j"${JOBS:-$(nproc)}" Image modules
+test "$(< "$out/include/config/kernel.release")" = "${linux_version}${localversion}"
 if find "$out" -type f -name 'btrfs.ko*' -print -quit | grep -q .; then
     echo 'Btrfs was built as a module; expected built-in CONFIG_BTRFS_FS=y' >&2
     exit 1
 fi
 (cd "$out"; sha256sum arch/arm64/boot/Image boot-csot.dtb native-display-cmdline > SHA256SUMS)
 printf '%s\n' "$rate" > "$out/refresh"
+cp -- kernel-source.tsv "$out/"
 printf '%s\n' "$display_source_rev" > "$out/display-source.sha"
 if [[ $out == csot-out ]]; then printf '%s\n' "$lab_source_rev" > "$out/lab-source.sha"; fi
 if [[ $out == csot-out ]]; then

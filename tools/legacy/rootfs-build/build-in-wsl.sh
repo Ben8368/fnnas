@@ -10,6 +10,6 @@ work=$(realpath -m -- "$3")
 case $work in /mnt/*) echo 'Use a native Linux filesystem for the work directory.' >&2; exit 2 ;; esac
 mkdir -- "$work"
 export CSOT_LAB=0
-bash "$port/build-release-kernel.sh" "$1" "$work/kernel"
+UMI_KERNEL_VERSION="${UMI_KERNEL_VERSION:-locked}" bash "$port/build-release-kernel.sh" "$1" "$work/kernel"
 sudo unshare --mount --propagation private bash "$port/assemble-release.sh" \
     "$1" "$2" "$work/kernel" "$work/assembly" "${@:4}"

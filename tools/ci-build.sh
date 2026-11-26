@@ -41,6 +41,10 @@ if [[ $profile != lab-* && $with_debian == true ]]; then
 fi
 # The project builders verify source revisions and baseline SHA-256 before use.
 bash rekernel-umi "$work/$boot" "$work/kernel"
+kernel_out=$work/kernel/kernel-out
+if [[ $profile == lab-* ]]; then kernel_out=$work/kernel/csot-out; fi
+install -m644 "$kernel_out/kernel-source.tsv" "$work/evidence/kernel-source.tsv"
+read -r version _ < "$kernel_out/kernel-source.tsv"
 if [[ $profile != lab-* && $with_debian == true ]]; then
     cp "$work/kernel/kernel-out/.config" "$work/evidence/kernel.config"
     sudo unshare --mount --propagation private bash tools/legacy/rootfs-build/assemble-release.sh \
@@ -51,16 +55,30 @@ if [[ $profile != lab-* && $with_debian == true ]]; then
         CROSS_COMPILE=aarch64-linux-gnu- INSTALL_HDR_PATH="$work/headers" headers_install
     aarch64-linux-gnu-gcc -Wall -Wextra -Werror -O2 -static -I"$work/headers/include" \
         -o "$work/umi-gpu-check" make-fnos/boot/abl-android-v2/tools/umi-gpu-check.c
-    python3 -B make-fnos/boot/abl-android-v2/tools/make-ram-probe.py "$images/boot-umi-csot-${CSOT_REFRESH}hz-6.18.60.img" \
-        "$work/probe.img" --gpu-check "$work/umi-gpu-check"
+    boot_name=boot-umi-csot-${CSOT_REFRESH}hz-$version.img
+    python3 -B make-fnos/boot/abl-android-v2/tools/make-ram-probe.py "$images/$boot_name" \
+        "$work/evidence/ram-probe-$boot_name" --gpu-check "$work/umi-gpu-check"
+    install -m644 "$images/$boot_name" "$work/evidence/"
     cp "$images/SHA256SUMS.txt" "$work/assembly/dpkg-audit.txt" "$work/kernel/kernel-out/display-source.sha" "$work/kernel/kernel-config.diff" "$work/evidence/"
 else
-    kernel_out=$work/kernel/kernel-out
-    if [[ $profile == lab-* ]]; then kernel_out=$work/kernel/csot-out; fi
     output=$work/evidence/kernel
     for file in arch/arm64/boot/Image boot-csot.dtb native-display-cmdline \
         include/config/kernel.release .config SHA256SUMS; do
         install -Dm644 "$kernel_out/$file" "$output/$file"
     done
     (cd "$output"; sha256sum -c SHA256SUMS)
+fi
+if [[ $profile != lab-* && ${PACKAGE_UMI_KERNEL:-false} == true ]]; then
+    if [[ $with_debian == true ]]; then
+        module_root=$work/assembly/pkg-image
+    else
+        module_root=$work/kernel-modules
+        krel=$(< "$kernel_out/include/config/kernel.release")
+        make -s -C "$work/kernel/linux" O="$kernel_out" ARCH=arm64 \
+            CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}" LOCALVERSION="-csot${CSOT_REFRESH}-sm8250" \
+            -j"${JOBS:-$(nproc)}" INSTALL_MOD_PATH="$module_root" INSTALL_MOD_STRIP=1 modules_install
+        rm -f "$module_root/lib/modules/$krel/build" "$module_root/lib/modules/$krel/source"
+        depmod -b "$module_root" "$krel"
+    fi
+    python3 -B make-fnos/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence"
 fi

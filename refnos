@@ -14,8 +14,16 @@ case "${1:-}" in
         shift
         exec bash "$repo/make-fnos/scripts/download-base.sh" "$@"
         ;;
+    kernel)
+        shift
+        exec "${FNOS_PYTHON:-python3}" "$repo/make-fnos/scripts/kernel-release.py" "$@"
+        ;;
+    boot)
+        shift
+        exec bash "$repo/make-fnos/scripts/build-released-boot.sh" "$@"
+        ;;
     -h|--help|'')
-        printf 'Usage: refnos {inspect|download|extract} --help\n'
+        printf 'Usage: refnos {inspect|download|extract|kernel|boot} --help\n'
         ;;
     *)
         printf 'Unknown refnos command: %s\n' "$1" >&2

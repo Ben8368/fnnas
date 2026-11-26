@@ -6,6 +6,7 @@ if (($# != 4 && $# != 6)) || ((EUID != 0)); then
     exit 2
 fi
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+source "$repo/make-fnos/kernel/source.sh"
 boot=$(realpath -e -- "$1")
 archive=$(realpath -e -- "$2")
 source_dir=$(realpath -e -- "$3")
@@ -40,7 +41,7 @@ prepare_chroot_dev() {
     mknod -m 666 "$root/dev/tty" c 5 0
 }
 
-printf '%s  %s\n' a7e4d341e35a663683bf41a8fe99d472bc6b8568aa1b54b05901dc7e9f2d842a "$boot" \
+printf '%s  %s\n' "$umi_boot_donor_sha256" "$boot" \
     51f4b38d23b71d7d70b7472b3ef95e673c0e984f1f7c489c75305fc4fb2d645f "$archive" | sha256sum -c -
 mkdir "$root" "$out"
 pigz -dc -- "$archive" | tar -xpf - -C "$root" --numeric-owner --acls --xattrs --xattrs-include='*'
@@ -48,9 +49,15 @@ unpack_bootimg --boot_img "$boot" --out main-boot
 old=6.18.52-current-sm8250
 rate=$(cat "$source_dir/kernel-out/refresh")
 [[ $rate == 60 || $rate == 90 ]]
-new=6.18.60-csot${rate}-sm8250
+version=$umi_linux_locked_version
+commit=$umi_linux_locked_commit
+if [[ -f $source_dir/kernel-out/kernel-source.tsv ]]; then
+    read -r version commit < "$source_dir/kernel-out/kernel-source.tsv"
+fi
+[[ $version =~ ^6\.18\.(0|[1-9][0-9]*)$ && $commit =~ ^[0-9a-f]{40}$ ]]
+new=$version-csot${rate}-sm8250
 test "$(< "$source_dir/kernel-out/include/config/kernel.release")" = "$new"
-test "$(git -C "$source_dir/linux" rev-parse HEAD)" = f45ed76d6791cf72ff1265ee93511175bbbc2f18
+test "$(git -C "$source_dir/linux" rev-parse HEAD)" = "$commit"
 grep -Fxq CONFIG_BTRFS_FS=y "$source_dir/kernel-out/.config"
 grep -Fxq CONFIG_BTRFS_FS_POSIX_ACL=y "$source_dir/kernel-out/.config"
 grep -Fxq CONFIG_QCOM_SPMI_ADC5=y "$source_dir/kernel-out/.config"
@@ -96,7 +103,7 @@ package() {
     ver=$(awk -v name="$name" '$1==name {print $2}' main-packages.tsv)
     test -n "$ver"
     bash "$repo/make-fnos/kernel/packaging/build-deb.sh" \
-        "$name" "$ver+umi6.18.60.1" "$staging" "$root/tmp/$name.deb"
+        "$name" "$ver+umi$version.1" "$staging" "$root/tmp/$name.deb"
 }
 # The baseline archive omits /tmp. Ordinary users and apt need a sticky, writable directory.
 install -d -m 1777 "$root/tmp"
@@ -188,9 +195,10 @@ trap - EXIT
 rm -f -- "$root/var/lib/systemd/random-seed"
 test "$(stat -c %a "$root/tmp")" = 1777
 
-img="$out/rootfs-umi-csot-${rate}hz-6.18.60.img"
+img="$out/rootfs-umi-csot-${rate}hz-$version.img"
 bash "$repo/make-fnos/scripts/assemble-rootfs.sh" "$root" ext4 "$umi_uuid" "$img"
 debugfs -R 'cat /etc/fstab' "$img" 2>/dev/null | grep -F "UUID=$umi_uuid / ext4"
-cp "$work/boot-build/"boot-umi-*.img "$out/"
-bash "$repo/make-fnos/scripts/verify-release.sh" "$out/boot-umi-csot-${rate}hz-6.18.60.img" "$img" "$kdir"
+boot_name=boot-umi-csot-${rate}hz-$version.img
+cp "$work/boot-build/$boot_name" "$out/"
+bash "$repo/make-fnos/scripts/verify-release.sh" "$out/$boot_name" "$img" "$kdir"
 (cd "$out"; sha256sum ./*.img > SHA256SUMS.txt; sha256sum -c SHA256SUMS.txt)

@@ -8,6 +8,8 @@ done < <(git ls-files -z -- ':(glob)make-fnos/**/*.sh' ':(glob)tools/**/*.sh' re
     'make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/bin/*' 'make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/sbin/*' \
     'make-fnos/fnos-files/different-files/xiaomi-umi/rootfs/usr/local/lib/umi/*')
 python3 -B -m unittest discover -v -s make-fnos/boot/abl-android-v2/tests
+python3 -B -m unittest discover -v -s make-fnos/scripts/tests -p test_kernel_release.py
+bash make-fnos/scripts/tests/test_kernel_patches.sh
 python3 -B -m unittest discover -v -s tools/legacy/rootfs-build/tests
 bash tools/legacy/rootfs-build/tests/test-serial-enrollment.sh
 bash tools/legacy/rootfs-build/tests/test-charge-limit.sh

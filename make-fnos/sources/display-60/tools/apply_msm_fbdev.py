@@ -10,16 +10,16 @@ FBDEV_BEFORE = "\tfbi->fbops = &msm_fb_ops;\n"
 FBDEV_AFTER = FBDEV_BEFORE + "\tfbi->flags |= FBINFO_VIRTFB; /* system memory */\n"
 
 
-def transform_fbdev(original):
-    if hashlib.sha256(original).hexdigest() != FBDEV_SHA256:
-        raise ValueError("MSM fbdev source differs from the pinned Linux baseline")
+def transform_fbdev(original, expected_sha256=None):
+    if hashlib.sha256(original).hexdigest() != (expected_sha256 or FBDEV_SHA256):
+        raise ValueError("MSM fbdev source differs from the verified Linux baseline")
     text = original.decode("utf-8")
     if text.count(FBDEV_BEFORE) != 1:
         raise ValueError("unexpected MSM fbdev patch anchors")
     return text.replace(FBDEV_BEFORE, FBDEV_AFTER).encode("utf-8")
 
 
-def stage_fbdev(source, native=True):
+def stage_fbdev(source, native=True, expected_sha256=None):
     path = source / FBDEV_PATH
     for parent in (path, *path.parents):
         if parent.is_symlink():
@@ -28,7 +28,7 @@ def stage_fbdev(source, native=True):
             break
     current = path.read_bytes()
     original = current.replace(FBDEV_AFTER.encode(), FBDEV_BEFORE.encode())
-    patched = transform_fbdev(original)
+    patched = transform_fbdev(original, expected_sha256)
     if current not in (original, patched):
         raise ValueError("unexpected MSM fbdev local modifications")
     path.write_bytes(patched if native else original)

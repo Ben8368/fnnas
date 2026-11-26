@@ -22,7 +22,7 @@ sudo apt install git gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-
     mkbootimg cpio initramfs-tools kmod pigz qemu-user-static e2fsprogs dpkg-dev zstd btrfs-progs rsync
 
 export CSOT_REFRESH=60       # 或 90；每档使用独立的新工作目录
-./rekernel-umi /path/to/main-boot.img "$HOME/umi-kernel-61860"
+UMI_KERNEL_VERSION=locked ./rekernel-umi /path/to/main-boot.img "$HOME/umi-kernel-61860"
 sudo unshare --mount --propagation private bash tools/legacy/rootfs-build/assemble-release.sh /path/to/main-boot.img /path/to/main-rootfs.tar.gz \
     "$HOME/umi-kernel-61860" /var/tmp/umi-image-61860
 ```

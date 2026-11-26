@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 import argparse
 import hashlib
+import subprocess
 from pathlib import Path
 if __package__:
     from .apply_clock_handoff import CLOCK_PATH, transform_clock, stage_clock
@@ -69,9 +70,9 @@ out:
 }
 
 
-def transform_mdss(original):
-    if hashlib.sha256(original).hexdigest() != MDSS_SHA256:
-        raise ValueError("MDSS source differs from the pinned Linux baseline")
+def transform_mdss(original, expected_sha256=None):
+    if hashlib.sha256(original).hexdigest() != (expected_sha256 or MDSS_SHA256):
+        raise ValueError("MDSS source differs from the verified Linux baseline")
     text = original.decode("utf-8")
     for anchor, replacement in MDSS_RESET_EDITS.items():
         if text.count(anchor) != 1:
@@ -80,9 +81,9 @@ def transform_mdss(original):
     return text.encode("utf-8")
 
 
-def transform_ubwc(original):
-    if hashlib.sha256(original).hexdigest() != UBWC_SHA256:
-        raise ValueError("UBWC source differs from the pinned Linux baseline")
+def transform_ubwc(original, expected_sha256=None):
+    if hashlib.sha256(original).hexdigest() != (expected_sha256 or UBWC_SHA256):
+        raise ValueError("UBWC source differs from the verified Linux baseline")
     text = original.decode("utf-8")
     include = "#include <linux/soc/qcom/ubwc.h>\n"
     if text.count(include) != 1 or text.count(UBWC_CALL) != 1:
@@ -91,9 +92,9 @@ def transform_ubwc(original):
         UBWC_CALL, UBWC_CALL + UBWC_QUIRK).encode("utf-8")
 
 
-def transform_dsi(original):
-    if hashlib.sha256(original).hexdigest() != DSI_SHA256:
-        raise ValueError("DSI source differs from the pinned Linux baseline")
+def transform_dsi(original, expected_sha256=None):
+    if hashlib.sha256(original).hexdigest() != (expected_sha256 or DSI_SHA256):
+        raise ValueError("DSI source differs from the verified Linux baseline")
     text = original.decode("utf-8")
     for anchor, addition in DSI_INSERTIONS.items():
         if text.count(anchor) != 1:
@@ -107,33 +108,33 @@ HOST_TRANSFORMS = {UBWC_PATH: transform_ubwc, DSI_PATH: transform_dsi,
                    FBDEV_PATH: transform_fbdev}
 
 
-def stage_mdss(source):
+def stage_mdss(source, expected_sha256=None):
     path = destination_dir(source, "drivers/gpu/drm/msm") / "msm_mdss.c"
     if path.is_symlink():
         raise ValueError("symlink MDSS target")
     current = original = path.read_bytes()
     for anchor, replacement in reversed(MDSS_RESET_EDITS.items()):
         original = original.replace(replacement.encode(), anchor.encode())
-    patched = transform_mdss(original)
+    patched = transform_mdss(original, expected_sha256)
     if current not in (original, patched):
         raise ValueError("unexpected MDSS local modifications")
     path.write_bytes(patched)
 
 
-def stage_dsi(source):
+def stage_dsi(source, expected_sha256=None):
     target = destination_dir(source, "drivers/gpu/drm/msm/dsi") / "dsi_host.c"
     if target.is_symlink():
         raise ValueError("symlink DSI target")
     current = original = target.read_bytes()
     for addition in DSI_INSERTIONS.values():
         original = original.replace(addition.encode(), b"")
-    patched = transform_dsi(original)
+    patched = transform_dsi(original, expected_sha256)
     if current not in (original, patched):
         raise ValueError("unexpected DSI local modifications")
     target.write_bytes(patched)
 
 
-def stage_ubwc(source, inputs):
+def stage_ubwc(source, inputs, expected_sha256=None):
     target = destination_dir(source, "drivers/soc/qcom")
     path, header = target / "ubwc_config.c", target / "umi_abl_ubwc.h"
     if path.is_symlink() or header.is_symlink():
@@ -141,26 +142,34 @@ def stage_ubwc(source, inputs):
     current = path.read_bytes()
     # Accept only pristine source or exactly this reviewed, idempotent patch.
     original = current.replace(b'#include "umi_abl_ubwc.h"\n', b"").replace(UBWC_QUIRK.encode(), b"")
-    patched = transform_ubwc(original)
+    patched = transform_ubwc(original, expected_sha256)
     if current not in (original, patched):
         raise ValueError("unexpected UBWC local modifications")
     header.write_bytes((inputs / "umi_abl_ubwc.h").read_bytes())
     path.write_bytes(patched)
 
 
-def stage(source, project, native=False):
+def stage(source, project, native=False, expected_revision=REVISION):
     if source.is_symlink() or not source.is_dir():
         raise ValueError("invalid source tree")
     marker = source / ".display-source-revision"
-    if marker.is_symlink() or marker.read_text().strip() != REVISION:
-        raise ValueError("source is not the pinned Linux revision")
+    if marker.is_symlink() or marker.read_text().strip() != expected_revision:
+        raise ValueError("source revision does not match the selected Linux commit")
     target = destination_dir(source, "drivers/gpu/drm/panel")
     inputs = project / "kernel/display"
-    stage_ubwc(source, inputs)
-    stage_dsi(source)
-    stage_mdss(source)
-    stage_clock(source, native)
-    stage_fbdev(source, native)
+
+    def source_hash(path):
+        if expected_revision == REVISION:
+            return None
+        # Keep the exact-file and patch-anchor checks against the selected Git tree.
+        upstream = subprocess.check_output(["git", "-C", source, "show", f"{expected_revision}:{path}"])
+        return hashlib.sha256(upstream).hexdigest()
+
+    stage_ubwc(source, inputs, source_hash(UBWC_PATH))
+    stage_dsi(source, source_hash(DSI_PATH))
+    stage_mdss(source, source_hash(MDSS_PATH))
+    stage_clock(source, native, source_hash(CLOCK_PATH))
+    stage_fbdev(source, native, source_hash(FBDEV_PATH))
     for name in ("panel-xiaomi-umi-csot.c", "umi_csot_commands.h", "Kconfig", "Makefile", "umi-csot.Kconfig"):
         if (target / name).is_symlink():
             raise ValueError("symlink panel target: " + name)
@@ -195,5 +204,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--native", action="store_true")
+    parser.add_argument("--expected-revision", default=REVISION)
     args = parser.parse_args()
-    stage(args.source, Path(__file__).resolve().parents[1], args.native)
+    stage(args.source, Path(__file__).resolve().parents[1], args.native, args.expected_revision)
