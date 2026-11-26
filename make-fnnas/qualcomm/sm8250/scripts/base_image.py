@@ -186,7 +186,7 @@ def inventory(guest):
     debian = guest.cat(debian_path).strip() if guest.is_file(debian_path, followsymlinks=True) else None
     fstab = guest.cat("/etc/fstab") if guest.is_file("/etc/fstab", followsymlinks=True) else None
     trim = sorted(guest.ls("/usr/trim"))
-    ota = re.compile(r"update|upgrade|ota|trim", re.I)
+    ota = re.compile(r"update|upgrade|(?:^|[-_.])ota(?:[-_.]|$)|^trim_|resize", re.I)
     dependencies = {}
     enabled = []
     for directory in SERVICE_DIRS:
@@ -199,6 +199,8 @@ def inventory(guest):
             if name.endswith((".service", ".timer")) and ota.search(name) and guest.is_file(unit, followsymlinks=True):
                 dependencies[unit] = [line for line in guest.cat(unit).splitlines() if line.startswith(
                     ("Exec", "Requires", "Wants", "After", "Before", "Condition", "EnvironmentFile", "Unit="))]
+    trim_bin = "/usr/trim/bin"
+    trim_tools = [name for name in guest.ls(trim_bin) if ota.search(name)] if guest.is_dir(trim_bin) else []
     stats = guest.statvfs("/")
     rootfs = {
         "architecture": "arm64",
@@ -211,6 +213,7 @@ def inventory(guest):
         "usr_trim_entries": trim,
         "fstab": fstab,
         "ota_matching_trim_entries": [name for name in trim if ota.search(name)],
+        "ota_matching_trim_tools": sorted(trim_tools),
         "ota_related_units": dependencies,
         "ota_related_enabled_links": sorted(set(enabled)),
         "ota_related_packages": [package for package in packages if ota.search(package.split("\t", 1)[0])],
@@ -295,6 +298,11 @@ def inspect(args):
     if output.exists() or output.is_symlink():
         raise FileExistsError(f"report directory already exists: {output}")
     sha256 = input_digest(source, args.sha256)
+    archive_path = args.rootfs_archive.absolute() if args.rootfs_archive else None
+    if archive_path and (archive_path.exists() or archive_path.is_symlink() or archive_path.is_relative_to(output)):
+        raise ValueError("choose a new RootFS archive path outside the report directory")
+    if archive_path and not args.sha256:
+        raise ValueError("provide --sha256 for RootFS extraction")
     with open_disk(source) as (guest, raw):
         disk, = guest.list_devices()
         layout = partition_layout(guest, disk)
@@ -309,7 +317,18 @@ def inspect(args):
                      "parent_id": item["btrfssubvolume_top_level_id"]}
                     for item in guest.btrfs_subvolume_list("/")
                 ]
+        for other in layout["partitions"]:
+            if other != part and other["filesystem"] in MOUNT_OPTIONS and (other["label"] or "").upper() == "BOOT":
+                with mounted(guest, other):
+                    other["top_level_entries"] = sorted(guest.ls("/"))
         raw_size = raw.stat().st_size
+        if archive_path:
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(dir=archive_path.parent, prefix=".fnos-rootfs-") as scratch:
+                archive = Path(scratch) / "rootfs.tar"
+                with mounted(guest, part, subvolume):
+                    guest.tar_out("/", str(archive), numericowner=True, xattrs=True, acls=True, selinux=True)
+                os.link(archive, archive_path)
     board = json.loads((PROJECT.parents[1] / "boards/xiaomi-umi.yml").read_text(encoding="utf-8"))
     info = {
         "image": source.name,
@@ -356,6 +375,7 @@ def main():
     inspect_parser = commands.add_parser("inspect", help="audit a raw image or its gzip/xz archive")
     inspect_parser.add_argument("image", type=Path)
     inspect_parser.add_argument("--output", default=DEFAULT_REPORT, type=Path, help="new report directory")
+    inspect_parser.add_argument("--rootfs-archive", type=Path, help="also extract using the same read-only appliance")
     inspect_parser.set_defaults(run=inspect)
     extract_parser = commands.add_parser("extract", help="export the selected RootFS to a new tar archive")
     extract_parser.add_argument("image", type=Path)

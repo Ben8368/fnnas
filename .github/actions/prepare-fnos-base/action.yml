@@ -27,7 +27,6 @@ runs:
         LIBGUESTFS_BACKEND_SETTINGS: force_tcg
       run: |
         renas="$GITHUB_ACTION_PATH/../../../renas"
-        bash "$renas" -b xiaomi-umi inspect "$INPUT_IMAGE" --output "$INPUT_OUTPUT" --sha256 "$INPUT_SHA256"
-        if [[ -n $INPUT_ROOTFS_ARCHIVE ]]; then
-          bash "$renas" -b xiaomi-umi extract "$INPUT_IMAGE" "$INPUT_ROOTFS_ARCHIVE" --sha256 "$INPUT_SHA256"
-        fi
+        extra=()
+        if [[ -n $INPUT_ROOTFS_ARCHIVE ]]; then extra+=(--rootfs-archive "$INPUT_ROOTFS_ARCHIVE"); fi
+        bash "$renas" -b xiaomi-umi inspect "$INPUT_IMAGE" --output "$INPUT_OUTPUT" --sha256 "$INPUT_SHA256" "${extra[@]}"

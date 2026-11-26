@@ -32,16 +32,15 @@ jobs:
           image: ${{ runner.temp }}/fnos.img.xz
           sha256: locked
           output: out/base-image-report
+          rootfs-archive: ${{ runner.temp }}/rootfs.tar
       - name: Save audit results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fnos-base-image-report
           path: out/base-image-report/
           if-no-files-found: error
-      - name: Extract RootFS into runner storage
-        if: runner.os == 'Linux'
-        env:
-          FNOS_PYTHON: /usr/bin/python3
-          LIBGUESTFS_BACKEND: direct
-          LIBGUESTFS_BACKEND_SETTINGS: force_tcg
-        run: ./renas -b xiaomi-umi extract "$RUNNER_TEMP/fnos.img.xz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked
+      - name: Record extracted archive (do not upload proprietary RootFS)
+        run: |
+          sha256sum "$RUNNER_TEMP/rootfs.tar" | tee -a "$GITHUB_STEP_SUMMARY"
+          tar -tf "$RUNNER_TEMP/rootfs.tar" > "$RUNNER_TEMP/rootfs.list"
+          grep -Eq '(^|/)usr/trim/bin/trim$' "$RUNNER_TEMP/rootfs.list"
