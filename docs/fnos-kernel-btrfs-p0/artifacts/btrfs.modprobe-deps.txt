@@ -1,0 +1,8 @@
+# Explicit Btrfs soft dependency selected by CONFIG_CRYPTO_XXHASH=m
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/crypto/xxhash_generic.ko
+# Btrfs hard dependency closure from the target modules.dep
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/lib/raid6/raid6_pq.ko
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/arch/arm64/lib/xor-neon.ko
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/crypto/xor.ko
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/crypto/blake2b_generic.ko
+insmod /lib/modules/6.18.60-csot90-sm8250/kernel/fs/btrfs/btrfs.ko

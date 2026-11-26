@@ -3,11 +3,13 @@
 </div>
 <br />
 
-[English Instructions](README.md) | [中文说明](README.cn.md)
+[English Instructions](README.md) | [中文说明](README.cn.md) | [Xiaomi Mi 10 (UMI)](README.umi.md)
 
 [FnNAS](https://fnnas.com/) is a deeply customized operating system built on the latest Linux kernel (Debian distribution). It offers excellent hardware compatibility with comprehensive support for mainstream x86 and Arm64 devices, enabling users to build their own NAS and flexibly expand external storage. Now, you can easily replace the Android TV system on your TV box with FnNAS, transforming it into a powerful private data storage server.
 
 This project benefits from the sustained contributions of numerous [contributors](https://github.com/ophub/amlogic-s9xxx-armbian/blob/main/CONTRIBUTORS.md). Under the guidance of FnNAS official technical experts, we have built an FnNAS system adapted for Arm64 architecture, covering TV boxes powered by `Amlogic`, `Rockchip`, and `Allwinner` SoCs. The build version fully inherits all features of the official system, with support for writing to eMMC boot and online kernel updates. Please visit the [⬇️Releases](https://github.com/ophub/fnnas/releases) page to download the latest firmware. You are welcome to `Fork` this project for personalized customization. If this project is helpful to you, please click the `⭐Star` in the upper right corner of the repository to show your support!
+
+This fork also includes [Xiaomi Mi 10 (SM8250) support](README.umi.md) through a dedicated Android ABL v2 boot chain and a pinned Linux 6.18.60 kernel. The existing UMI images use Debian. Integration of the fnOS user space is still in progress.
 
 ## FnNAS Firmware Default Information
 

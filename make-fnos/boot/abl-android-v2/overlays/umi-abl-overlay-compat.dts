@@ -1,0 +1,12 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	fragment@0 {
+		target-path = "/abl_ovf";
+		__overlay__ {
+			/* Only resolves Android DTBO fixups; not a Linux regulator. */
+			pm8150a_l2: ovf152 { };
+		};
+	};
+};

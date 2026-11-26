@@ -1,0 +1,12 @@
+# The SHA-256 pins the downloaded .img.gz bytes. Record it after verifying the
+# official published MD5 against the actual artifact.
+[source]
+vendor = "fnOS"
+architecture = "arm64"
+version = "1.2.1011"
+donor = "radxa-rock-5b"
+download_page = "https://fnnas.com/download-arm"
+image_url = "https://iso.liveupdate.fnnas.com/arm/image/1.2.1011/rock-5b/fnos_Mainland-PE_arm_1.2.1011_rock-5b_3132.img.gz"
+requires_signed_url = true
+official_md5 = "d9ee549f1d2f9d35ff669f4b11056aec"
+sha256 = ""

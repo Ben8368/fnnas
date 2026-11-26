@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Umi runtime integration. SMB5 follows the LOS policy after telemetry checks.
+config BATTERY_MISEED_QCOM_FG
+	tristate "MiSeed Qualcomm FG port (Umi runtime)"
+	depends on SPMI && POWER_SUPPLY && OF
+	help
+	  Qualcomm FG driver from colorgarden/umi-mainline. Gen4 telemetry
+	  are read from inherited peripheral state; no profile SRAM is loaded.
+
+config CHARGER_MISEED_PM8150B
+	tristate "MiSeed PM8150B charger port (Umi runtime)"
+	depends on SPMI && POWER_SUPPLY && IIO && OF
+	depends on THERMAL && THERMAL_OF
+	help
+	  SMB5 driver from colorgarden/umi-mainline with the fixed LOS Umi
+	  current/voltage profile and automatic attach policy. Userspace controls
+	  charging through the standard power_supply properties.
+
+config CHARGER_BQ25970_CORE
+	tristate "Texas Instruments BQ25970 charge pump"
+	depends on I2C && OF && POWER_SUPPLY
+	select REGMAP_I2C
+	help
+	  Independent chip transport, IRQ, fault cache and power_supply.
+	  Starts disabled. Generic DT devices expose monitoring only; active
+	  charging requires a qualified board adapter and exclusive owner.
+
+config CHARGER_MISEED_UMI_PPS
+	bool "MiSeed Umi guarded BQ25970 PPS controller"
+	depends on I2C=y && OF && TYPEC_TCPM && TYPEC_QCOM_PMIC
+	depends on THERMAL && THERMAL_OF
+	depends on CHARGER_MISEED_PM8150B && BATTERY_MISEED_QCOM_FG
+	select AUXILIARY_BUS
+	select CHARGER_BQ25970_CORE
+	help
+	  Automatic LOS-style PPS policy using mainline TCPM and a standalone
+	  BQ25970. The Umi board profile is sink-only and is exercised on the
+	  maintainer's Umi device through temporary RAM boot.
+
+config MISEED_POWER_DIAGNOSTICS
+	bool "MiSeed read-only wired SMB5 register diagnostics"
+	depends on CHARGER_MISEED_PM8150B
+	help
+	  Log raw status registers from the owning charger's polling worker.
+	  This is an optional diagnostic, not a product ABI or control path.
+	  Normal consumers use power_supply attributes and notifications.
+
+config CHARGER_UMI_RX1619
+	tristate "Umi RX1619 wireless receiver telemetry"
+	depends on I2C && OF && GPIOLIB && POWER_SUPPLY && IIO
+	select REGMAP_I2C
+	help
+	  Read receiver power-good, voltage, current and board temperature.
+	  Does not enable the receiver, divider, charge pump or battery charging.
+
+config UMI_RX_DIAGNOSTIC
+	bool "Umi wireless RX evidence-only profile"
+	depends on CHARGER_MISEED_PM8150B=y && CHARGER_UMI_RX1619=y
+	depends on CHARGER_MISEED_UMI_PPS && MISEED_POWER_DIAGNOSTICS
+	depends on !UMI_RX_LINK
+	help
+	  Hold the SMB5 charger and wired pump off while collecting RX telemetry.
+
+config UMI_RX_LINK
+	bool "Umi RX1619 receiver negotiation"
+	depends on CHARGER_UMI_RX1619=y && CHARGER_MISEED_PM8150B=y && !SUSPEND
+	help
+	  Service the receiver mailbox and suppress RX on wired attach. This does
+	  not enable the divider, wireless pump or battery charge command.
+
+config UMI_RX_EPP
+	bool "Umi EPP divider and thermal input policy"
+	depends on UMI_RX_LINK
+	select REGMAP_I2C
+	help
+	  Enable the guarded forward divider and RX input-current policy. Battery
+	  charging remains disabled unless the separate buck profile is selected.
+
+config UMI_RX_BUCK
+	bool "Umi EPP battery acceptance using the SMB5 buck"
+	depends on UMI_RX_EPP && CHARGER_MISEED_UMI_PPS=y
+	depends on BATTERY_MISEED_QCOM_FG=y && MFD_SPMI_PMIC=y
+	help
+	  Dedicated lab-only acceptance path. Enables battery charging from an
+	  isolated EPP RX session; no fast-charge protocol or pump is requested.
+
+config UMI_RX_NFC_COEX
+	bool "Umi RX and NFC coexistence sampling"
+	depends on UMI_RX_DIAGNOSTIC
+
+config UMI_RX_ENABLE_EXPERIMENT
+	bool "Drive the Umi RX enable line in diagnostics"
+	depends on UMI_RX_DIAGNOSTIC

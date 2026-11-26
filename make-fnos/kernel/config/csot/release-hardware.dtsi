@@ -1,0 +1,28 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/* The donor disables the ADSP that provides LPASS clocks. Keep its
+ * dependent sound card, VA macro and RX/TX SoundWire controllers offline
+ * until the Umi audio chain is supported.
+ */
+&{/sound} {
+	status = "disabled";
+};
+
+&{/soc@0/codec@3370000} {
+	status = "disabled";
+};
+
+&{/soc@0/soundwire@3210000} {
+	status = "disabled";
+};
+
+&{/soc@0/soundwire@3230000} {
+	status = "disabled";
+};
+
+/* This GPI-only serial engine's sole client is the unsupported FTS
+ * touchscreen. Leave the shared DMA controller and other I2C buses alone.
+ */
+&{/soc@0/geniqup@ac0000/i2c@a94000} {
+	status = "disabled";
+};

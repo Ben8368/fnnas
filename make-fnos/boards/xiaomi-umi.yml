@@ -1,0 +1,10 @@
+{
+  "board": "xiaomi-umi",
+  "soc": "qcom-sm8250",
+  "architecture": "arm64",
+  "bootloader": "xiaomi-abl",
+  "boot_format": "android-boot-v2",
+  "stock_dtbo_required": true,
+  "rootfs_partition": "userdata",
+  "rootfs_filesystem": null
+}

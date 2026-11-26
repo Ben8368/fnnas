@@ -1,0 +1,33 @@
+name: Prepare an official fnOS ARM64 image
+description: Audit a local disk image and optionally extract a verified RootFS archive
+inputs:
+  image:
+    description: Path to a raw or gzip/xz-compressed disk image
+    required: true
+  sha256:
+    description: SHA-256 of the input file, or locked to read the repository source lock
+    required: true
+  output:
+    description: New report directory
+    required: true
+  rootfs-archive:
+    description: Optional new path for a RootFS tar archive
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        INPUT_IMAGE: ${{ inputs.image }}
+        INPUT_SHA256: ${{ inputs.sha256 }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_ROOTFS_ARCHIVE: ${{ inputs.rootfs-archive }}
+        FNOS_PYTHON: /usr/bin/python3
+        LIBGUESTFS_BACKEND: direct
+        LIBGUESTFS_BACKEND_SETTINGS: force_tcg
+      run: |
+        refnos="$GITHUB_ACTION_PATH/../../../refnos"
+        bash "$refnos" inspect "$INPUT_IMAGE" --output "$INPUT_OUTPUT" --sha256 "$INPUT_SHA256"
+        if [[ -n $INPUT_ROOTFS_ARCHIVE ]]; then
+          bash "$refnos" extract "$INPUT_IMAGE" "$INPUT_ROOTFS_ARCHIVE" --sha256 "$INPUT_SHA256"
+        fi

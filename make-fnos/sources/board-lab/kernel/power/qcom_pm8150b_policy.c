@@ -1,0 +1,329 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2024, Teguh Sobirin <teguh@sobir.in>.
+ *
+ * This driver is for the switch-mode battery charger power delivery
+ * and boost hardware found in pm8150b and related PMICs.
+ * This work based on pmi8998 charger driver by
+ * Caleb Connolly <caleb.connolly@linaro.org>
+ * Should be merged with the existing charger driver in the future.
+ */
+
+/* MiSeed: Umi runtime integration. Standard CHARGE_BEHAVIOUR API,
+ * fail-closed polling, LOS-derived limits and automatic charge policy.
+ */
+
+#include "qcom_pm8150b_internal.h"
+#include "umi_pps_policy.h"
+#include "qcom_pm8150b_rx.h"
+
+
+
+/* Only this driver's power_supply may be passed to the PPS ownership API. */
+static bool smb5_is_ours(struct power_supply *psy)
+{
+	return psy && psy->desc && psy->desc->set_property == smb5_set_property;
+}
+
+bool umi_smb5_wired_detached(struct power_supply *psy)
+{
+	return smb5_is_ours(psy) && smb5_wired_detached(power_supply_get_drvdata(psy));
+}
+
+int umi_smb5_wireless_rx_state(struct power_supply *psy)
+{
+	if (!smb5_is_ours(psy))
+		return -ENODEV;
+	return smb5_wireless_rx_state(power_supply_get_drvdata(psy));
+}
+
+int smb5_get_prop_status(struct smb5_chip *chip, int *val);
+
+int umi_smb5_claim(struct power_supply *psy, int *stage, bool *claimed)
+{
+	struct smb5_chip *chip;
+	int rc, status, online;
+
+	*claimed = false;
+	if (!smb5_is_ours(psy))
+		return -ENODEV;
+	chip = power_supply_get_drvdata(psy);
+	mutex_lock(&chip->lock);
+	if (chip->stopping || chip->stop_pending || chip->pps_owned || chip->inhibit ||
+	    chip->full_bypass || chip->power_stage >= 2 ||
+	    chip->pd_transition || chip->cooling_state || chip->pps_fault ||
+	    smb5_wireless_rx_state(chip)) {
+		rc = -EBUSY;
+		goto out;
+	}
+	rc = smb5_get_prop_usb_online(chip, &online);
+	if (!rc && !online)
+		rc = -ENOLINK;
+	if (!rc)
+		rc = smb5_get_prop_status(chip, &status);
+	if (rc)
+		goto out;
+	if (status == POWER_SUPPLY_STATUS_FULL) {
+		chip->full_bypass = true;
+		rc = -EBUSY;
+		goto out;
+	}
+	if (!stage) {
+		rc = -EINVAL;
+		goto out;
+	}
+	*stage = chip->power_stage;
+	/* Keep ownership even after an I/O error; cleanup must verify the stop. */
+	chip->pps_owned = true;
+	*claimed = true;
+	chip->inhibit = true;
+	chip->enabled = false;
+	rc = smb5_inhibit_with_fallback(chip, "pps-claim");
+	if (!rc)
+		rc = regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL,
+					USBIN_SUSPEND_BIT, USBIN_SUSPEND_BIT);
+	/* The shared VBUS will follow the pump's PPS work point while SMB5 is
+	 * suspended. Keep its input allowance continuous until fixed-PD recovery.
+	 */
+	if (!rc)
+		rc = regmap_write(chip->regmap, chip->base + 0x344, BIT(3));
+out:
+	mutex_unlock(&chip->lock);
+	return rc;
+}
+
+int umi_smb5_check(struct power_supply *psy, int stage)
+{
+	struct smb5_chip *chip;
+	unsigned int charge, input;
+	int rc;
+
+	if (!smb5_is_ours(psy))
+		return -ENODEV;
+	if (stage < 0 || stage > UMI_WIRED_BYPASS_STAGE)
+		return -EINVAL;
+	chip = power_supply_get_drvdata(psy);
+	mutex_lock(&chip->lock);
+	rc = !chip->pps_owned || chip->stopping ? -EPERM : 0;
+	if (!rc)
+		rc = regmap_read(chip->regmap, chip->base + CHARGING_ENABLE_CMD, &charge);
+	if (!rc)
+		rc = regmap_read(chip->regmap, chip->base + USBIN_CMD_IL, &input);
+	if (!rc && ((charge & CHARGING_ENABLE_CMD_BIT) || !(input & USBIN_SUSPEND_BIT)))
+		rc = -EPERM;
+	if (!rc) {
+		chip->power_stage = umi_pps_max(chip->power_stage, stage);
+		if (stage == UMI_WIRED_BYPASS_STAGE)
+			chip->full_bypass = true;
+		rc = smb5_wireless_rx_state(chip);
+		if (rc > 0)
+			rc = -EBUSY;
+		else if (!rc)
+			rc = chip->max_fv_uv;
+	}
+	mutex_unlock(&chip->lock);
+	return rc;
+}
+
+int umi_smb5_release(struct power_supply *psy, int fault)
+{
+	struct smb5_chip *chip;
+	int rc, online;
+
+	if (!smb5_is_ours(psy))
+		return -ENODEV;
+	chip = power_supply_get_drvdata(psy);
+	mutex_lock(&chip->lock);
+	rc = smb5_inhibit_with_fallback(chip, "pps-release");
+	/* Apply the 10 W handoff ceiling before restoring system input, not one
+	 * worker later. Offline releases need no input budget or ADC sample.
+	 */
+	if (!rc)
+		rc = smb5_wired_source(chip, &online);
+	if (!rc && online && chip->power_stage >= 2)
+		rc = smb5_power_limit(chip, UMI_PPS_FINISH_SOC);
+	if (!rc && online)
+		rc = regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL,
+					USBIN_SUSPEND_BIT, 0);
+	if (!rc) {
+		chip->pps_owned = false;
+		chip->inhibit = false;
+		chip->pps_fault |= !!fault;
+	}
+	if (!rc)
+		mod_delayed_work(system_wq, &chip->status_change_work, 0);
+	mutex_unlock(&chip->lock);
+	return rc;
+}
+
+int smb5_get_prop_health(struct smb5_chip *chip, int *val);
+
+static int smb5_battery_value(struct smb5_chip *chip,
+                             enum power_supply_property property, int *value)
+{
+ union power_supply_propval val;
+ int rc = power_supply_get_property(chip->bms, property, &val);
+ if (!rc)
+  *value = val.intval;
+ return rc;
+}
+
+static int smb5_limits_verified(struct smb5_chip *chip)
+{
+ static const unsigned int regs[] = { FAST_CHARGE_CURRENT_CFG, USBIN_CURRENT_LIMIT_CFG,
+                                     FLOAT_VOLTAGE_CFG, WD_CFG, SNARL_BARK_BITE_WD_CFG, 0x670 };
+ unsigned int v[ARRAY_SIZE(regs)];
+ int rc, i;
+ for (i = 0; i < ARRAY_SIZE(regs); i++) {
+  rc = regmap_read(chip->regmap, chip->base + regs[i], &v[i]);
+  if (rc) return rc;
+ }
+	if (v[0] != UMI_CHARGE_FCC_UA / CURRENT_SCALE_FACTOR ||
+	    v[1] > UMI_CHARGE_USB_ICL_UA / CURRENT_SCALE_FACTOR ||
+     3600000 + (int)v[2] * 10000 != chip->max_fv_uv ||
+     !(v[3] & WDOG_TIMER_EN_BIT) ||
+     !(v[4] & BITE_WDOG_DISABLE_CHARGING_CFG_BIT) || !(v[5] & BIT(0)))
+  return -EPERM;
+ return 0;
+}
+
+#include "umi_smb5_diagnostics.h"
+
+void smb5_status_change_work(struct work_struct *work)
+{
+ struct smb5_chip *chip = container_of(work, struct smb5_chip, status_change_work.work);
+ int online = 0, present = 0, health = POWER_SUPPLY_HEALTH_UNKNOWN;
+ int temp = -10000, voltage = -1, soc = -1, bms_current = 0;
+ int owner, rc, allow = 0, stop_rc, status;
+ mutex_lock(&chip->lock);
+ if (chip->stopping) {
+  mutex_unlock(&chip->lock);
+  return;
+ }
+ smb5_log_registers(chip);
+#ifdef CONFIG_UMI_RX_DIAGNOSTIC
+ smb5_rx_diag_sample(chip);
+ mutex_unlock(&chip->lock);
+ schedule_delayed_work(&chip->status_change_work, msecs_to_jiffies(1000));
+ return;
+#endif
+#ifdef CONFIG_UMI_RX_LINK
+ rc = smb5_rx_sync_pin(chip);
+ if (rc) {
+  owner = SMB5_INPUT_UNRESOLVED;
+  goto finish;
+ }
+#endif
+ owner = smb5_usbin_owner(chip);
+ rc = owner < 0 ? owner : 0;
+ smb5_reset_detached_session(chip, owner);
+#ifdef CONFIG_UMI_RX_BUCK
+ if (owner == SMB5_INPUT_RX && !chip->stop_pending) {
+  if (!chip->rx_buck_active) rc = smb5_inhibit_with_fallback(chip, "rx-entry");
+  smb5_rx_link_step(chip, !rc);
+  allow = chip->rx_buck_active;
+  goto publish;
+ }
+#endif
+ /* A fresh source does not clear an unconfirmed stop from the old source. */
+ if (owner != SMB5_INPUT_WIRED || chip->stop_pending)
+  goto finish;
+ {
+  unsigned int input;
+  rc = smb5_get_prop_usb_online(chip, &online);
+  if (!rc && !online && !chip->pps_owned && !chip->pps_fault) {
+   rc = regmap_read(chip->regmap, chip->base + USBIN_CMD_IL, &input);
+   /* Allow unloaded PD handoff preparation. Recheck selection before AUTO. */
+   if (!rc) online = !!(input & USBIN_SUSPEND_BIT);
+  }
+ }
+ if (!rc) rc = smb5_battery_value(chip, POWER_SUPPLY_PROP_PRESENT, &present);
+ if (!rc) rc = smb5_battery_value(chip, POWER_SUPPLY_PROP_TEMP, &temp);
+ if (!rc) rc = smb5_battery_value(chip, POWER_SUPPLY_PROP_VOLTAGE_NOW, &voltage);
+ if (!rc) rc = smb5_battery_value(chip, POWER_SUPPLY_PROP_CAPACITY, &soc);
+ if (!rc) rc = smb5_battery_value(chip, POWER_SUPPLY_PROP_CURRENT_NOW, &bms_current);
+ if (!rc) rc = smb5_get_prop_health(chip, &health);
+ if (!rc) rc = smb5_limits_verified(chip);
+	if (!rc && bms_current > UMI_CHARGE_FCC_UA) rc = -EOVERFLOW;
+ /* Recheck after potentially sleeping telemetry, including suspended PD handoff. */
+ if (!rc && online) {
+  owner = smb5_usbin_owner(chip);
+  if (owner != SMB5_INPUT_WIRED) {
+   online = 0;
+   rc = owner < 0 ? owner : -EAGAIN;
+   goto finish;
+  }
+ }
+ /* Automatic stop hysteresis: 80% inhibits until <=71%; user inhibit is
+  * independent. A new charge cycle may then advance through SOC stages. */
+ if (!rc && online && health == POWER_SUPPLY_HEALTH_GOOD &&
+     chip->full_bypass && soc >= 0 && soc <= UMI_CHARGE_RESUME_SOC) {
+  chip->full_bypass = false;
+	  chip->power_stage = 2; /* Fixed 5 V recharge keeps the 10 W stage. */
+ }
+ if (!rc && online && soc >= 0 && soc <= 100)
+  chip->power_stage = umi_pps_max(chip->power_stage, umi_pps_soc_stage(soc));
+ /* SOC limit or hardware termination stops battery charge, not system input.
+  * Preserve system input while stopping battery charge. This session latch
+  * is independent of user inhibit; it clears at <=71% or on unplug.
+  */
+ if (!rc && online && !chip->pps_owned) {
+  smb5_thermal_limit(chip, temp);
+  rc = smb5_fixed_update(chip);
+ }
+ if (!rc && health == POWER_SUPPLY_HEALTH_GOOD && online &&
+     !chip->inhibit && !chip->full_bypass) {
+  if (soc >= UMI_CHARGE_END_SOC)
+   chip->full_bypass = true;
+  else if (!chip->pps_owned) {
+  rc = smb5_get_prop_status(chip, &status);
+  if (!rc && status == POWER_SUPPLY_STATUS_FULL)
+   chip->full_bypass = true;
+  }
+ }
+ /* Restore system headroom only after battery inhibition succeeds. */
+ if (!rc && online && chip->full_bypass && !chip->pps_owned && !chip->pps_fault) {
+  chip->power_stage = UMI_WIRED_BYPASS_STAGE;
+  rc = smb5_inhibit_with_fallback(chip, "bypass");
+  chip->enabled = false;
+  if (!rc)
+   rc = smb5_power_limit(chip, soc);
+  if (!rc)
+   rc = regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL, USBIN_SUSPEND_BIT, 0);
+ }
+ if (!rc && health == POWER_SUPPLY_HEALTH_GOOD && online &&
+     !chip->pps_owned && !chip->inhibit && !chip->full_bypass && !chip->pps_fault)
+  rc = smb5_power_limit(chip, soc);
+ if (!rc && !chip->inhibit && !chip->cooling_state && !chip->full_bypass &&
+     !chip->pps_fault)
+  allow = umi_charge_policy(online, present, health == POWER_SUPPLY_HEALTH_GOOD,
+                           temp, voltage, soc, chip->max_fv_uv,
+                           chip->enabled, false);
+ if (allow) {
+  /* Limits are set with charging disabled, before probe registers IRQ/work. */
+  rc = regmap_update_bits(chip->regmap, chip->base + USBIN_CMD_IL, USBIN_SUSPEND_BIT, 0);
+  /* After restoring input, require the actual buck path before enabling. */
+  if (!rc) rc = smb5_get_prop_usb_online(chip, &online);
+  if (!rc && !online) rc = -EAGAIN;
+  if (!rc) rc = regmap_write(chip->regmap, chip->base + BARK_BITE_WDOG_PET, BARK_BITE_WDOG_PET_BIT);
+  if (!rc) rc = smb5_set_prop_charging_enabled(chip, POWER_SUPPLY_CHARGE_BEHAVIOUR_AUTO);
+ }
+finish:
+ if (!allow || rc) {
+  stop_rc = smb5_inhibit_with_fallback(chip, "worker");
+  if (!rc) rc = stop_rc;
+ }
+#ifdef CONFIG_UMI_RX_LINK
+ smb5_rx_link_step(chip, owner == SMB5_INPUT_RX && !rc && !allow);
+#endif
+#ifdef CONFIG_UMI_RX_BUCK
+publish:
+#endif
+ chip->enabled = allow && !rc;
+ dev_info(chip->dev, "miseed-charge enabled=%u input=%d owner=%d present=%d health=%d temp_decic=%d vbat_uv=%d current_ua=%d soc=%d rc=%d fcc_ua=%u icl_ua=%u fv_uv=%d full_bypass=%u\n",
+          chip->enabled, online, owner, present, health, temp, voltage, bms_current, soc, rc,
+			UMI_CHARGE_FCC_UA, UMI_CHARGE_USB_ICL_UA, chip->max_fv_uv, chip->full_bypass);
+ mutex_unlock(&chip->lock);
+ power_supply_changed(chip->chg_psy);
+ schedule_delayed_work(&chip->status_change_work, msecs_to_jiffies(1000));
+}

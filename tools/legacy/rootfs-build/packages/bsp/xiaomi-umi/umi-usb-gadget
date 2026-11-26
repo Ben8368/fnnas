@@ -1,0 +1,55 @@
+#!/bin/bash
+set -euo pipefail
+
+g=/sys/kernel/config/usb_gadget/umi
+c=$g/configs/c.1
+ncm=$g/functions/ncm.usb0
+acm=$g/functions/acm.usb0
+
+stop_gadget() {
+	[[ -d "$g" ]] || return 0
+	if [[ -n $(< "$g/UDC") ]]; then
+		printf '\n' > "$g/UDC" || return 1
+	fi
+	rm -f -- "$c/ncm.usb0" "$c/acm.usb0" || return 1
+	for dir in "$c" "$ncm" "$acm" "$g/strings/0x409" "$g"; do
+		if [[ -d "$dir" ]]; then rmdir -- "$dir" || return 1; fi
+	done
+}
+
+case "${1:-}" in
+stop) stop_gadget; exit ;;
+start) ;;
+*) exit 2 ;;
+esac
+
+modprobe libcomposite
+shopt -s nullglob
+udcs=(/sys/class/udc/*)
+if ((${#udcs[@]} == 0)); then
+	echo 'USB device controller not ready' >&2
+	exit 1
+fi
+stop_gadget
+mkdir "$g"
+trap 'rc=$?; if ((rc)); then stop_gadget || true; fi' EXIT
+
+printf '0x1d6b\n' > "$g/idVendor"
+printf '0x0103\n' > "$g/idProduct"
+printf '0xef\n' > "$g/bDeviceClass"
+printf '0x02\n' > "$g/bDeviceSubClass"
+printf '0x01\n' > "$g/bDeviceProtocol"
+mkdir "$g/strings/0x409" "$c" "$ncm" "$acm"
+printf 'Xiaomi Mi 10\n' > "$g/strings/0x409/product"
+printf 'umi\n' > "$g/strings/0x409/manufacturer"
+ln -s -- "$acm" "$ncm" "$c/"
+printf '%s\n' "${udcs[0]##*/}" > "$g/UDC"
+
+# A network/DHCP failure must not disable the serial recovery channel.
+if iface=$(< "$ncm/ifname") && ip addr replace 172.16.42.1/16 dev "$iface" && ip link set "$iface" up; then
+	if command -v unudhcpd >/dev/null; then
+		unudhcpd -i "$iface" -s 172.16.42.1 -c 172.16.42.2 &
+	fi
+else
+	echo 'USB NCM network setup failed; serial console remains available' >&2
+fi

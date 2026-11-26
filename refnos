@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+case "${1:-}" in
+    inspect)
+        shift
+        exec bash "$repo/make-fnos/scripts/inspect-base.sh" "$@"
+        ;;
+    extract)
+        shift
+        exec bash "$repo/make-fnos/scripts/extract-rootfs.sh" "$@"
+        ;;
+    download)
+        shift
+        exec bash "$repo/make-fnos/scripts/download-base.sh" "$@"
+        ;;
+    -h|--help|'')
+        printf 'Usage: refnos {inspect|download|extract} --help\n'
+        ;;
+    *)
+        printf 'Unknown refnos command: %s\n' "$1" >&2
+        exit 2
+        ;;
+esac

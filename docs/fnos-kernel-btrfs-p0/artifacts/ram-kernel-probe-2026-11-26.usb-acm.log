@@ -1,0 +1,30 @@
+UMI RAM-only probe: 6.18.60-csot90-sm8250
+UMI_PROBE: PID1 kernel=6.18.60-csot90-sm8250
+UMI_PROBE: mounts proc=1 sysfs=1
+UMI_PROBE: USB no UDC/role state exposed
+UMI_PROBE: configuring ACM only (no serial shell)
+UMI_PROBE: ACM function created; waiting for UDC
+UMI_PROBE: expected root UUID=8b9559f5-7493-4c36-8d7b-d4fde6b7f60a not found by blkid
+UMI_PROBE: CSOT brightness=1500/2047
+UMI_PROBE: ACM bound to a600000.usb
+UMI_PROBE: USB  /sys/class/udc/a600000.usb/state=configured /sys/class/typec/port0/data_role=host [device]
+UMI_PROBE_REPORT_END
+UMI_PROBE: deferred: c440000.spmi:pmic@2:charger@1000	qcom-pm8150b-charger: Couldn't get usb_in_v_div_16 IIO channel
+UMI_PROBE: DRM: 	active=1
+UMI_PROBE: DRM: 	mode: "1080x2340": 90 235788 1080 1096 1104 1112 2340 2344 2348 2356 0x48 0x0
+UMI_PROBE: DRM: connector[34]: DSI-1
+UMI_PROBE: platform a600000.usb driver=dwc3
+UMI_PROBE: platform a6f8800.usb driver=dwc3-qcom-legacy
+UMI_PROBE: platform 88e3000.phy driver=qcom-snps-hs-femto-v2-phy
+UMI_PROBE: display /sys/class/drm/card1-DSI-1/status=connected
+UMI_PROBE: display /sys/class/drm/card1-DSI-1/enabled=enabled
+UMI_PROBE: display /sys/class/graphics/fb0/name=msmdrmfb
+UMI_PROBE: display [    3.198038] [drm] Initialized simpledrm 1.0.0 for 9c000000.framebuffer on minor 0
+UMI_PROBE: display [    3.234340] Console: switching to colour frame buffer device 146x33
+UMI_PROBE: display [    3.254354] simple-framebuffer 9c000000.framebuffer: [drm] fb0: simpledrmdrmfb frame buffer device
+UMI_PROBE: display [    7.655244] Umi ABL root: using standard SM8250 UBWC data
+UMI_PROBE: display <13>[    8.230656] UMI_PROBE: CSOT brightness=1500/2047
+UMI_PROBE: display [    8.643359] Console: switching to colour dummy device 80x25
+UMI_PROBE: display [    9.149633] panel-xiaomi-umi-csot ae94000.dsi.0: CSOT prepared: mode=1080x2340@90 Hz clock=235788 kHz, 90 Hz DCS programmed, rate_select=1 (not measured scanout)
+UMI_PROBE: display [    9.150722] panel-xiaomi-umi-csot ae94000.dsi.0: CSOT brightness=1500 transfer_rc=0
+UMI_PROBE: display [    9.171199] Console: switching to colour frame buffer device 146x33

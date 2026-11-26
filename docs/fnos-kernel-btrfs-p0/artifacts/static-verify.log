@@ -1,0 +1,7 @@
+PASS release kernel segment byte-identical
+PASS CSOT 90Hz DTB byte-identical
+PASS release command line preserved with RAM-only rdinit marker (root UUID redacted)
+kernel_sha256=e7ec8feb791c3def943cf80cb7b7096694a225bbe73067a9350919aba3c169e1
+dtb_sha256=c0d382bc903c573c2ab0aa6632800981e3300c5572544d2cb5134137f41d8e5b
+ramdisk_sha256=9c31fd91d0c757bb87e3e6ed95cead1af6d351d064c812365910c4398a8980f6
+cmdline=console=tty0 consoleblank=0 clk_ignore_unused pd_ignore_unused fw_devlink=off pstore.backend=ramoops earlycon=msm_geni_serial,0xa90000 loglevel=7 root=UUID=<redacted> rootwait rootdelay=2 swiotlb=2048 loop.max_part=7 rdinit=/umi-p0-btrfs-test panic=10 umi_probe_id=p0-btrfs-20261125

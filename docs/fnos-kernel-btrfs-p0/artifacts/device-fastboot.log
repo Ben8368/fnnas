@@ -1,0 +1,7 @@
+Device: Xiaomi Mi 10 (umi), CSOT 0B, DTBO 11
+Kernel image: boot-umi-csot-90hz-6.18.60-btrfs-p0-ram.img
+fastboot getvar product: umi
+fastboot getvar unlocked: yes
+fastboot boot: Sending 'boot.img' (28728 KB) OKAY; Booting OKAY
+Runtime: script reported all RAM-only Btrfs P0 checks PASS; Android returned, sys.boot_completed=1
+Storage writes: none; no fastboot flash command was issued

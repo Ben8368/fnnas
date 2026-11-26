@@ -1,0 +1,13 @@
+Source: sanitized ramoops console captured after the RAM-only kernel probe returned to Android.
+
+[3.416779] qcom-soundwire 3210000.soundwire: error -ENOENT: unable to get iface clock
+[3.427159] qcom-soundwire 3210000.soundwire: probe with driver qcom-soundwire failed with error -2
+[3.438910] qcom-soundwire 3230000.soundwire: error -ENOENT: unable to get iface clock
+[3.449175] qcom-soundwire 3230000.soundwire: probe with driver qcom-soundwire failed with error -2
+[7.577007] gpi a00000.dma-controller: error with cmd:EV ALLOCATE ret:-5
+[7.592365] gpi a00000.dma-controller: error alloc_ev_chan:-5
+[7.605920] geni_i2c a94000.i2c: error -ENODEV: Failed to get rx DMA ch
+[8.767266] adreno 3d00000.gpu: error -22 initializing firmware qcom/sm8250/a650_zap.mbn
+[8.783966] msm_dpu ae01000.display-controller: [drm:adreno_load_gpu] *ERROR* gpu hw init failed: -22
+[8.812960] platform 3d6a000.gmu: [drm:a6xx_gmu_set_oob] *ERROR* Timeout waiting for GMU OOB set GPE_SET: 0x0
+[20.370740] platform c440000.spmi:pmic@2:charger@1000: deferred probe pending: qcom-pm8150b-charger: Couldn't get usb_in_v_div_16 IIO channel

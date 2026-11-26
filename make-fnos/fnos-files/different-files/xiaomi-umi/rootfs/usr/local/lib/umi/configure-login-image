@@ -1,0 +1,36 @@
+#!/bin/bash
+# Runs inside the target rootfs chroot, not on a deployed device.
+set -euo pipefail
+
+if getent passwd armbian >/dev/null; then
+	echo 'Unexpected preinstalled armbian account; refusing to package the image.' >&2
+	exit 1
+fi
+
+# Replace the inherited hash altogether rather than just prefixing it with '!'.
+usermod -p '!' root
+rm -f /etc/shadow-
+install -Dm600 /dev/null /var/lib/umi/root-password-unset
+rm -f /root/.not_logged_in_yet \
+	/etc/systemd/system/getty@.service.d/override.conf \
+	/etc/systemd/system/getty@tty1.service.d/override.conf \
+	/etc/systemd/system/serial-getty@.service.d/override.conf \
+	/etc/systemd/system/serial-getty@ttyGS0.service.d/override.conf
+
+overlay=/tmp/overlay
+install -Dm755 "$overlay/usr/local/sbin/umi-serial-console" /usr/local/sbin/umi-serial-console
+install -Dm644 "$overlay/etc/systemd/system/serial-getty@ttyGS0.service.d/50-umi-console.conf" \
+	/etc/systemd/system/serial-getty@ttyGS0.service.d/50-umi-console.conf
+install -Dm644 "$overlay/etc/udev/rules.d/99-umi-serial.rules" /etc/udev/rules.d/99-umi-serial.rules
+
+# Put this Include first: OpenSSH normally uses the first value it reads for an option.
+install -Dm644 "$overlay/etc/ssh/umi-sshd.conf" /etc/ssh/umi-sshd.conf
+if [[ $(head -n 1 /etc/ssh/sshd_config) != 'Include /etc/ssh/umi-sshd.conf' ]]; then
+	sed -i '1i Include /etc/ssh/umi-sshd.conf' /etc/ssh/sshd_config
+fi
+systemctl disable ssh.service ssh.socket
+systemctl mask ssh.service ssh.socket
+# A leftover network-only gadget would claim the same USB device controller.
+systemctl mask usbgadget-rndis.service
+systemctl is-enabled --quiet umi-usb-gadget.service
+rm -f /etc/ssh/ssh_host_*

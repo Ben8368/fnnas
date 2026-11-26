@@ -1,0 +1,43 @@
+name: Prepare official fnOS base
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the locked base from the vendor
+        env:
+          FNOS_SIGNED_URL: ${{ secrets.FNOS_SIGNED_URL }}
+        run: ./refnos download "$RUNNER_TEMP/fnos.img.gz" --url "$FNOS_SIGNED_URL"
+      - name: Install image tooling
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends python3-guestfs linux-image-virtual btrfs-progs
+          sudo chmod a+r /boot/vmlinuz-*
+      - name: Audit the verified base
+        uses: ./.github/actions/prepare-fnos-base
+        with:
+          image: ${{ runner.temp }}/fnos.img.gz
+          sha256: locked
+          output: out/base-image-report
+      - name: Save audit results
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fnos-base-image-report
+          path: out/base-image-report/
+          if-no-files-found: error
+      - name: Extract RootFS into runner storage
+        if: runner.os == 'Linux'
+        env:
+          FNOS_PYTHON: /usr/bin/python3
+          LIBGUESTFS_BACKEND: direct
+          LIBGUESTFS_BACKEND_SETTINGS: force_tcg
+        run: ./refnos extract "$RUNNER_TEMP/fnos.img.gz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked

@@ -13,3 +13,12 @@ npm-debug.log*
 *.orig
 *~
 \#*#
+
+# UMI build outputs and local Python cache
+/tools/legacy/boot/*.img
+/tools/legacy/rootfs/*.tar.gz
+/tools/legacy/rootfs/parts/
+/tools/legacy/boot-build/out/
+/tools/legacy/rootfs-build/output/
+*.rebuilt.dtb
+__pycache__/

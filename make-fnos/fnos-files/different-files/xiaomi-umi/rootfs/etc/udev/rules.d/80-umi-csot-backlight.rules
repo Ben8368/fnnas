@@ -1,0 +1,2 @@
+# Match the MiSeed CSOT device and use the umi-mainline startup brightness.
+ACTION=="add", SUBSYSTEM=="backlight", KERNEL=="ae94000.dsi.0", DRIVERS=="panel-xiaomi-umi-csot", ATTR{max_brightness}=="2047", ATTR{brightness}="1500"

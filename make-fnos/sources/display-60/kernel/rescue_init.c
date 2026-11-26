@@ -1,0 +1,162 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+/* Diagnostic PID 1 for the first MiSeed Umi/CSOT RAM boot; no storage is mounted. */
+#define _GNU_SOURCE
+#include "rescue_internal.h"
+
+static void mount_virtual(const char *source, const char *target,
+                          const char *type, unsigned long flags) {
+    if (mount(source, target, type, flags, NULL) && errno != EBUSY)
+        fprintf(stderr, "mount %s failed: %s\n", target, strerror(errno));
+}
+
+void report_runtime_status(void) {
+    report_platform_driver("PDC", "qcom,sm8250-pdc");
+    report_platform_driver("RPMh RSC", "qcom,rpmh-rsc");
+    report_platform_driver("RPMh power-domain provider", "qcom,sm8250-rpmhpd");
+    list_directory("RPMh power-domain driver",
+                   "/sys/bus/platform/drivers/qcom-rpmhpd");
+    report_rpmh_kernel_messages();
+    report_dt_u32("PON mode-bootloader",
+        "/sys/firmware/devicetree/base/soc@0/spmi@c440000/pmic@0/pon@800/mode-bootloader");
+    report_platform_driver("SPMI controller", "qcom,spmi-pmic-arb");
+    report_platform_driver("PON", "qcom,pm8998-pon");
+    report_platform_driver("QUP wrapper", "qcom,geni-se-qup");
+    report_i2c_devices();
+    report_nfc_status("/sys/bus/i2c/devices", "/sys/class/nfc");
+    report_power_supply_diagnostics();
+    list_directory("USB UDC entries", "/sys/class/udc");
+    report_spmi_dt_nodes();
+    report_spmi_devices();
+    print_file("/sys/kernel/reboot/mode");
+    report_usb_probe_devices();
+    report_display_status();
+}
+
+static void usb_console(void) {
+    setvbuf(stdin, NULL, _IONBF, 0);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    while (reopen_usb_console()) sleep(1);
+    for (;;) {
+        char line[64];
+        puts("\nMiSeed Umi/CSOT USB diagnostic. Storage is not mounted.");
+        puts("Commands: help, status, dtb, display, display-frame, display-on, display-off, dmesg, thermal, thermal-stop, thermal-clear, nfc-status, nfc-l3, tcpm-log, version, memory, cmdline, mounts, charge, charge-log, logs, charge-test, charge-test-10min, charge-stop, pps-status, pps-stop, reboot, bootloader");
+        puts("display/display-frame/dmesg are read-only; display-on/off set only the identified CSOT backlight to 1500/0.");
+        puts("charge/charge-log/logs show read-only samples and the retained RAM timeline.");
+        puts("thermal reads thermal sysfs; thermal-stop/thermal-clear set only umi-wired-pd cooling state 1/0.");
+        puts("Wired controls: charge-stop; bounded charge-test commands require a diagnostic kernel.");
+        puts("PPS starts automatically on an eligible USB-PD attach when the qualified board profile is enabled; use pps-status or pps-stop.");
+        fputs("miseed> ", stdout);
+        if (!fgets(line, sizeof(line), stdin)) {
+            sleep(1);
+            while (reopen_usb_console()) sleep(1);
+            continue;
+        }
+        line[strcspn(line, "\r\n")] = '\0';
+        if (!strcmp(line, "help")) continue;
+        if (!strcmp(line, "display")) report_display_status();
+        else if (!strcmp(line, "display-frame")) export_display_frame();
+        else if (!strcmp(line, "display-on")) (void)set_display_brightness(1500);
+        else if (!strcmp(line, "display-off")) (void)set_display_brightness(0);
+        else if (!strcmp(line, "dmesg")) export_kernel_log();
+        else if (!strcmp(line, "status")) report_runtime_status();
+        else if (!strcmp(line, "dtb")) export_runtime_dtb("/sys/firmware/fdt");
+        else if (!strcmp(line, "thermal")) report_thermal_devices();
+        else if (!strcmp(line, "thermal-stop")) (void)set_wired_pd_cooling_state(1);
+        else if (!strcmp(line, "thermal-clear")) (void)set_wired_pd_cooling_state(0);
+        else if (!strcmp(line, "nfc-status"))
+            report_nfc_status("/sys/bus/i2c/devices", "/sys/class/nfc");
+        else if (!strcmp(line, "nfc-l3"))
+            (void)run_nfc_l3_probe();
+        else if (!strcmp(line, "tcpm-log")) report_tcpm_logs();
+        else if (!strcmp(line, "version")) print_file("/proc/version");
+        else if (!strcmp(line, "memory")) print_file("/proc/meminfo");
+        else if (!strcmp(line, "cmdline")) print_file("/proc/cmdline");
+        else if (!strcmp(line, "mounts")) print_file("/proc/mounts");
+        else if (!strcmp(line, "charge")) charge_log_export(32);
+        else if (!strcmp(line, "charge-log") || !strcmp(line, "logs")) charge_log_export(0);
+        else if (!strcmp(line, "charge-test") || !strcmp(line, "charge-test-10min")) {
+            int extended = !strcmp(line, "charge-test-10min");
+            int rc = write_value("/sys/class/power_supply/pm8150b-charger/charge_test",
+                                 extended ? "arm-10min" : "arm");
+            charge_log_append("CONTROL", "charge_test_arm seconds=%u rc=%d", extended ? 600U : 60U, rc);
+            if (rc) puts("Charge test arm failed; inspect logs.");
+            else printf("Test armed: disconnect computer, attach charger. Ends on unplug or after %u seconds; LOS limits and safety checks stay active.\n",
+                        extended ? 600U : 60U);
+        } else if (!strcmp(line, "pps-status")) {
+            if (pps_control(NULL)) puts("PPS controller unavailable or ambiguous; board qualification may be incomplete.");
+        } else if (!strcmp(line, "pps-stop")) {
+            puts(pps_control("inhibit-charge") ? "PPS stop unavailable/failed; disconnect charger." : "PPS stopped; SMB5 fallback policy resumed.");
+        } else if (!strcmp(line, "charge-stop")) {
+            /* Also stop PPS when present, before releasing the ordinary charger. */
+            char path[512];
+            int pps_rc = pps_control_path(path, sizeof(path));
+            if (!pps_rc) pps_rc = write_value(path, "inhibit-charge");
+            else if (errno == ENOENT || errno == ENODEV) pps_rc = 0;
+            int rc = write_value("/sys/class/power_supply/pm8150b-charger/charge_behaviour", "inhibit-charge");
+            if (pps_rc) rc = pps_rc;
+            charge_log_append("CONTROL", "charge_test_stop rc=%d", rc);
+            puts(rc ? "Charge stop failed; disconnect the charger." : "Charging inhibited; test cancelled.");
+        } else if (!strcmp(line, "reboot")) {
+            puts("Normal reboot requested.");
+            sync();
+            (void)reboot(RB_AUTOBOOT);
+        } else if (!strcmp(line, "bootloader")) {
+            puts("Requesting bootloader via PMIC PON mode; no storage write.");
+            sync();
+            request_bootloader();
+        } else if (*line) puts("Unknown command; type help.");
+    }
+}
+
+int main(void) {
+    int usb_ready;
+    int usb_configured;
+    unsigned int tick = 0;
+    (void)setsid();
+    mount_virtual("devtmpfs", "/dev", "devtmpfs", MS_NOSUID);
+    mount_virtual("proc", "/proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC);
+    mount_virtual("sysfs", "/sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC);
+    if (!ensure_dir("/sys/kernel/debug"))
+        mount_virtual("debugfs", "/sys/kernel/debug", "debugfs",
+                      MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_RDONLY);
+
+    (void)signal(SIGPIPE, SIG_IGN);
+    if (charge_log_init()) fprintf(stderr, "Charge RAM recorder unavailable: %s\n", strerror(errno));
+    charge_kmsg_fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    if (charge_kmsg_fd < 0) charge_log_append("ERROR", "kernel_log_unavailable errno=%d", errno);
+    charge_screen_fd = open("/dev/tty0", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
+    charge_log_append("START", "samples_read_only=1 controls=thermal-stop,thermal-clear,charge-test,charge-test-10min,charge-stop sample_interval_s=2; USB disconnect does not stop recording; reboot loses RAM log");
+    charge_kernel_drain();
+    charge_snapshot();
+
+    usb_ready = node_exists("/dev/ttyGS0");
+    usb_configured = usb_ready;
+    if (usb_ready) {
+        puts("Reusing kernel-bound CDC-ACM gadget for early logs and console.");
+    } else {
+        usb_configured = setup_usb_acm() == 0;
+    }
+    if (usb_configured) {
+        pid_t child;
+        fflush(NULL);
+        child = fork();
+        if (child == 0) {
+            if (charge_kmsg_fd >= 0) close(charge_kmsg_fd);
+            if (charge_screen_fd >= 0) close(charge_screen_fd);
+            if (!usb_ready) wait_for_usb_acm();
+            usb_console();
+        }
+        if (child < 0) fprintf(stderr, "USB console fork failed: %s\n", strerror(errno));
+    }
+    puts("\nMiSeed Umi/CSOT RAM diagnostic. No storage is mounted.");
+    puts("USB ACM console is available when the gadget binds successfully.");
+    /* PID 1 records independently of every USB open/read/write and reconnect. */
+    for (;;) {
+        int status;
+        charge_kernel_drain();
+        if (++tick % 2 == 0) charge_snapshot();
+        if (waitpid(-1, &status, WNOHANG) > 0)
+            charge_log_append("ERROR", "USB_console_exited status=%d", status);
+        sleep(1);
+    }
+}

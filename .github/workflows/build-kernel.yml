@@ -1,0 +1,59 @@
+name: Build Umi kernel
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-kernel.yml'
+      - 'make-fnos/**'
+      - 'rekernel-umi'
+      - 'tools/**'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Kernel profile
+        type: choice
+        options: [release, csot-60, csot-90, lab-60, lab-90]
+        default: release
+      with_debian_baseline:
+        description: Also rebuild the historical Debian image pair (release profiles)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+concurrency:
+  group: kernel-${{ github.ref }}-${{ inputs.profile || 'release' }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      PROFILE: ${{ inputs.profile || 'release' }}
+      WITH_DEBIAN_BASELINE: ${{ inputs.with_debian_baseline || false }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare disposable x86-64 runner
+        run: |
+          # Only on this GitHub-hosted VM: the Android SDK and .NET are not build inputs.
+          sudo rm -rf -- /usr/local/lib/android/sdk /usr/share/dotnet /usr/local/.ghcup
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross \
+            build-essential git bc bison flex libssl-dev libelf-dev dwarves device-tree-compiler \
+            mkbootimg cpio initramfs-tools-core kmod pigz qemu-user-static e2fsprogs dpkg-dev zstd rsync
+          df -h "$RUNNER_TEMP"
+          test "$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')" -ge 25
+      - name: Build and verify selected kernel profile
+        run: bash tools/ci-build.sh "$PROFILE" "$RUNNER_TEMP/umi"
+      - name: Keep kernel outputs and build evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: umi-${{ env.PROFILE }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/umi/evidence/
+          if-no-files-found: warn
+          retention-days: 7
+          include-hidden-files: true

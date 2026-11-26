@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/* The release donor is a flattened tree. Name the live nodes, not the
+ * similarly named downstream overlay stubs in /abl_ovf. No phandle literals. */
+#include <dt-bindings/clock/qcom,dispcc-sm8250.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+#define tlmm fnos_live_tlmm
+#define mdss_dsi0 fnos_live_dsi0
+
+apps_rsc: &{/soc@0/rsc@18200000} {};
+vph_pwr: &{/vph-pwr-regulator} {};
+uart12: &{/soc@0/geniqup@ac0000/serial@a90000} {};
+tlmm: &{/soc@0/pinctrl@f100000} {};
+dispcc: &{/soc@0/clock-controller@af00000} {};
+mdss: &{/soc@0/display-subsystem@ae00000} {};
+mdss_dsi0: &{/soc@0/display-subsystem@ae00000/dsi@ae94000} {};
+mdss_dsi0_out: &{/soc@0/display-subsystem@ae00000/dsi@ae94000/ports/port@1/endpoint} {};
+mdss_dsi0_phy: &{/soc@0/display-subsystem@ae00000/phy@ae94400} {};
+vreg_l5a_0p88: &{/soc@0/rsc@18200000/regulators-0/ldo5} {};
+cont_splash_mem: &{/reserved-memory/cont-splash@9c000000} {};

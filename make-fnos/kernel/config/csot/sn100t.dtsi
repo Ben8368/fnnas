@@ -1,0 +1,57 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/* From the pinned board-source snapshot. */
+/* NQ NFC control pins adapted from the pinned Umi/Kona pinctrl definitions.
+ * This controller shares VEN between the NFCC and SN100 eSE; no independent
+ * eSE power GPIO is declared. Linux NCI owns the transport, retaining VEN
+ * on close. Only the active pin state is modeled; wake needs fresh L3.
+ */
+&tlmm {
+	umi_nfc_default: umi-nfc-default-state {
+		irq-pins {
+			pins = "gpio111";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		control-pins {
+			pins = "gpio83", "gpio110";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+
+		clock-request-pins {
+			pins = "gpio7";
+			function = "gpio";
+			output-disable; /* NFCC requests the clock; AP must not drive CLKREQ. */
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+};
+
+/* The running Mi 10 NFC device tree reports i2c@984000/nq@28. On the
+ * SM8250 base this is I2C1, whose SCL/SDA pins are GPIO4/5.
+ */
+&qupv3_id_0 {
+	status = "okay";
+};
+
+&i2c1 {
+	/* Match Umi's active Android DT qcom,clk-freq-out: 1 MHz. */
+	clock-frequency = <1000000>;
+	status = "okay";
+
+	umi_nfc: nfc@28 {
+		compatible = "nxp,sn100t";
+		reg = <0x28>;
+		enable-gpios = <&tlmm 83 GPIO_ACTIVE_HIGH>;
+		firmware-gpios = <&tlmm 110 GPIO_ACTIVE_HIGH>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <111 IRQ_TYPE_LEVEL_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&umi_nfc_default>;
+	};
+};

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/supply/xiaomi,umi-ln8282.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: LN8282 wireless input voltage divider on Xiaomi Mi 10
+
+maintainers:
+  - Ben <Ben8368@vip.qq.com>
+
+description: |
+  LN8282 switched-capacitor stage connected to the wireless receiver on Umi.
+
+properties:
+  compatible:
+    const: xiaomi,umi-ln8282
+  reg:
+    maxItems: 1
+  power-supplies:
+    maxItems: 1
+    description: Wireless receiver supplying the divider.
+
+required:
+  - compatible
+  - reg
+  - power-supplies
+
+additionalProperties: false

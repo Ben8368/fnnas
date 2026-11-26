@@ -1,0 +1,13 @@
+UMI_P0_BTRFS_REPORT_BEGIN
+UMI_P0_BTRFS: START kernel=6.18.60-csot90-sm8250 ram_only=1 storage_devices=untouched
+UMI_P0_BTRFS: PASS: xxhash64 crypto soft dependency loaded
+UMI_P0_BTRFS: USB ACM ready udc=a600000.usb
+UMI_P0_BTRFS: PASS: btrfs module loaded and filesystem registered
+UMI_P0_BTRFS: PASS: RAM image attached loop=/dev/loop0
+UMI_P0_BTRFS: PASS: Btrfs mounted with compress=zstd:1
+UMI_P0_BTRFS: PASS: Btrfs read/write and sync
+UMI_P0_BTRFS: PASS: on-disk extent metadata confirms ZSTD compression
+UMI_P0_BTRFS: PASS: subvolume create and read-only snapshot verified
+UMI_P0_BTRFS: RESULT: PASS all RAM-only Btrfs P0 checks
+UMI_P0_BTRFS: No physical storage was mounted or written; rebooting to installed Android in 25 seconds
+UMI_P0_BTRFS_REPORT_END

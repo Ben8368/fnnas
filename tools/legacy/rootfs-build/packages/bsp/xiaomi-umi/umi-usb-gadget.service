@@ -1,0 +1,15 @@
+[Unit]
+Description=Xiaomi Mi 10 USB network and serial gadget
+Requires=sys-kernel-config.mount
+After=sys-kernel-config.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/umi-usb-gadget start
+ExecStop=/usr/local/sbin/umi-usb-gadget stop
+Restart=on-failure
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target

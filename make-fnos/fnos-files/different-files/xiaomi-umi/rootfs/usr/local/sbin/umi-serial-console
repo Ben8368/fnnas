@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+marker=/var/lib/umi/root-password-unset
+
+needs_enrollment() {
+	local record hash
+	[[ -f "$marker" ]] || return 1
+	record=$(getent shadow root) || return 1
+	IFS=: read -r _ hash _ <<< "$record"
+	[[ "$hash" == '!' ]]
+}
+
+# Enrollment never runs on another tty or opens a privileged shell.
+[[ $(tty) == /dev/ttyGS0 ]] || exit 1
+if [[ "${1:-}" == --enroll ]]; then
+	needs_enrollment || exit 1
+	printf '\nSet a unique password for local root access. SSH remains disabled.\n'
+	passwd root || exit 1
+	if needs_enrollment; then exit 1; fi
+	rm -f -- "$marker"
+	printf '\nPassword set. Log in on this serial console.\n'
+	exit 0
+fi
+
+# If interrupted after passwd commits, proceed to normal login on restart.
+if needs_enrollment; then
+	exec /sbin/agetty --wait-cr --skip-login --login-program "$0" \
+		--login-options '--enroll' --local-line - 115200 "${TERM:-vt102}"
+fi
+exec /sbin/agetty -o '-p -- \u' --local-line --keep-baud 115200,57600,38400,9600 - "${TERM:-vt102}"

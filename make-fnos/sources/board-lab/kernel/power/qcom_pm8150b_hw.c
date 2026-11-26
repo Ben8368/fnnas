@@ -1,0 +1,404 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (c) 2024, Teguh Sobirin <teguh@sobir.in>.
+ *
+ * This driver is for the switch-mode battery charger power delivery
+ * and boost hardware found in pm8150b and related PMICs.
+ * This work based on pmi8998 charger driver by
+ * Caleb Connolly <caleb.connolly@linaro.org>
+ * Should be merged with the existing charger driver in the future.
+ */
+
+/* MiSeed: Umi runtime integration. Standard CHARGE_BEHAVIOUR API,
+ * fail-closed polling, LOS-derived limits and automatic charge policy.
+ */
+
+#include "qcom_pm8150b_internal.h"
+#include "qcom_pm8150b_rx.h"
+
+/* TCPM ONLINE reports sink enable, not physical detach. Read the same
+ * CC and VBUS status bits as the pinned Qualcomm TCPC driver.
+ */
+int smb5_read_typec_misc(struct smb5_chip *chip, unsigned int *status)
+{
+	struct device *tcpc = chip->pd->dev.parent;
+	u32 base;
+	int ret;
+
+	if (!tcpc || tcpc->parent != chip->dev->parent ||
+	    !device_is_compatible(tcpc, "qcom,pm8150b-typec"))
+		return -ENODEV;
+	ret = device_property_read_u32(tcpc, "reg", &base);
+	if (ret || base != PM8150B_TYPEC_BASE)
+		return ret ? ret : -EINVAL;
+	return regmap_read(chip->regmap, base + TYPEC_MISC_STATUS, status);
+}
+
+bool smb5_wired_detached(struct smb5_chip *chip)
+{
+	unsigned int status;
+
+	return !smb5_read_typec_misc(chip, &status) &&
+	       !(status & (TYPEC_CC_ATTACHED | TYPEC_VBUS_DETECT));
+}
+
+int smb5_wireless_rx_state(struct smb5_chip *chip)
+{
+	union power_supply_propval online;
+	int ret;
+
+	if (!chip->wireless_rx)
+		return 0;
+	ret = power_supply_get_property(chip->wireless_rx, POWER_SUPPLY_PROP_ONLINE, &online);
+	return ret ? ret : !!online.intval;
+}
+
+static bool smb5_usbin_selected(unsigned int path)
+{
+	const unsigned int selected = P_PATH_VALID_INPUT_POWER_SOURCE_STS_BIT | P_PATH_USE_USBIN_BIT;
+
+	return (path & (selected | P_PATH_USE_DCIN_BIT)) == selected;
+}
+
+/* Source identity is separate from selection: a deliberate PPS suspension
+ * need not have a selected buck path. VBUS can be high from RX alone.
+ */
+int smb5_usbin_owner(struct smb5_chip *chip)
+{
+	union power_supply_propval sink;
+	unsigned int stat, cc, path;
+	int rx, ret;
+
+	ret = regmap_read(chip->regmap, chip->base + USBIN_INT_RT_STS_OFFSET, &stat);
+	if (ret)
+		return ret;
+	rx = smb5_wireless_rx_state(chip);
+	if (rx < 0)
+		return rx;
+	if (!(stat & USBIN_PLUGIN_RT_STS_BIT))
+		return rx ? SMB5_INPUT_UNRESOLVED : SMB5_INPUT_NONE;
+	ret = power_supply_get_property(chip->pd, POWER_SUPPLY_PROP_ONLINE, &sink);
+	if (ret)
+		return ret;
+	ret = smb5_read_typec_misc(chip, &cc);
+	if (ret)
+		return ret;
+	if (rx && ((cc & TYPEC_CC_ATTACHED) || sink.intval))
+		return SMB5_INPUT_CONFLICT;
+	if (!(cc & TYPEC_VBUS_DETECT))
+		return SMB5_INPUT_UNRESOLVED;
+	if (!rx) {
+		if (!(cc & TYPEC_CC_ATTACHED) || (sink.intval != 1 && sink.intval != 2))
+			return SMB5_INPUT_UNRESOLVED;
+#ifdef CONFIG_UMI_RX_LINK
+		/* Covers the wired AUTO/PPS entry points between notifier and worker. */
+#ifdef CONFIG_UMI_RX_EPP
+		if (umi_rx_epp_owned(chip))
+			return SMB5_INPUT_UNRESOLVED;
+#endif
+		if (chip->wireless_rx) {
+			ret = umi_rx1619_pin_status(chip->wireless_rx);
+			if (ret)
+				return ret < 0 ? ret : SMB5_INPUT_UNRESOLVED;
+		}
+#endif
+		return SMB5_INPUT_WIRED;
+	}
+	ret = regmap_read(chip->regmap, chip->base + POWER_PATH_STATUS, &path);
+	if (ret)
+		return ret;
+	return smb5_usbin_selected(path) ? SMB5_INPUT_RX : SMB5_INPUT_UNRESOLVED;
+}
+
+int smb5_wired_source(struct smb5_chip *chip, int *present)
+{
+	int owner = smb5_usbin_owner(chip);
+
+	*present = owner == SMB5_INPUT_WIRED;
+	return owner < 0 ? owner : 0;
+}
+
+int smb5_get_prop_usb_online(struct smb5_chip *chip, int *val)
+{
+	unsigned int path;
+	int present, ret;
+
+	ret = smb5_wired_source(chip, &present);
+	if (ret)
+		return ret;
+	*val = 0;
+	if (!present)
+		return 0;
+	ret = regmap_read(chip->regmap, chip->base + POWER_PATH_STATUS, &path);
+	if (!ret)
+		*val = smb5_usbin_selected(path);
+	return ret;
+}
+
+/*
+ * Qualcomm "automatic power source detection" aka APSD
+ * tells us what type of charger we're connected to.
+ */
+int smb5_apsd_get_charger_type(struct smb5_chip *chip, int *val)
+{
+	unsigned int apsd_stat, stat;
+	int usb_online = 0;
+	int rc;
+
+	rc = smb5_get_prop_usb_online(chip, &usb_online);
+	if (!usb_online) {
+		*val = POWER_SUPPLY_USB_TYPE_UNKNOWN;
+		return rc;
+	}
+
+	rc = regmap_read(chip->regmap, chip->base + APSD_STATUS, &apsd_stat);
+	if (rc < 0) {
+		dev_err(chip->dev, "Failed to read apsd status, rc = %d", rc);
+		return rc;
+	}
+	if (!(apsd_stat & APSD_DTC_STATUS_DONE_BIT)) {
+		dev_err(chip->dev, "Apsd not ready");
+		return -EAGAIN;
+	}
+
+	rc = regmap_read(chip->regmap, chip->base + APSD_RESULT_STATUS, &stat);
+	if (rc < 0) {
+		dev_err(chip->dev, "Failed to read apsd result, rc = %d", rc);
+		return rc;
+	}
+
+	stat &= APSD_RESULT_STATUS_MASK;
+
+	if (stat & CDP_CHARGER_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_CDP;
+	} else if (stat & DCP_CHARGER_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_DCP;
+	} else if (stat & OCP_CHARGER_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_DCP;
+	} else if (stat & FLOAT_CHARGER_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_DCP;
+	} else if (stat & QC_2P0_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_DCP;
+	} else if (stat & QC_3P0_BIT){
+		*val = POWER_SUPPLY_USB_TYPE_DCP;
+	} else {
+		*val = POWER_SUPPLY_USB_TYPE_SDP;
+	}
+
+	return 0;
+}
+
+int smb5_get_prop_status(struct smb5_chip *chip, int *val)
+{
+	unsigned char stat[2];
+	int usb_online = 0;
+	int rc;
+
+	rc = smb5_get_prop_usb_online(chip, &usb_online);
+	if (rc < 0)
+		return rc;
+#ifdef CONFIG_UMI_RX_BUCK
+	if (!usb_online && READ_ONCE(chip->rx_buck_active)) {
+		rc = smb5_usbin_owner(chip);
+		if (rc < 0) return rc;
+		usb_online = rc == SMB5_INPUT_RX;
+		rc = 0;
+	}
+#endif
+	if (!usb_online) {
+		*val = POWER_SUPPLY_STATUS_DISCHARGING;
+		return rc;
+	}
+
+	rc = regmap_bulk_read(chip->regmap,
+			      chip->base + BATTERY_CHARGER_STATUS_1, &stat, 2);
+	if (rc < 0) {
+		dev_err(chip->dev, "Failed to read charging status ret=%d\n",
+			rc);
+		return rc;
+	}
+
+	/* PM8150B STATUS_2 bit 5 is a voltage comparator, not battery OV.
+	 * Unlike PMI8998, its battery-overvoltage error is bit 1 (LOS smb5-reg.h).
+	 * Keep the error override; normal charging follows STATUS_1's phase.
+	 */
+	if (stat[1] & CHARGER_ERROR_STATUS_BAT_OV_BIT) {
+		*val = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		return 0;
+	}
+
+	stat[0] = stat[0] & BATTERY_CHARGER_STATUS_MASK;
+
+	switch (stat[0]) {
+	case TRICKLE_CHARGE:
+	case PRE_CHARGE:
+	case FULLON_CHARGE:
+	case TAPER_CHARGE:
+		*val = POWER_SUPPLY_STATUS_CHARGING;
+		return rc;
+	case INHIBIT_CHARGE:
+	case PAUSE_CHARGE:
+	case DISABLE_CHARGE:
+		*val = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		return rc;
+	case TERMINATE_CHARGE:
+		*val = POWER_SUPPLY_STATUS_FULL;
+		return rc;
+	default:
+		*val = POWER_SUPPLY_STATUS_UNKNOWN;
+		return rc;
+	}
+}
+
+int smb5_get_iio_chan(struct smb5_chip *chip, struct iio_channel *chan,
+			     int *val)
+{
+	int rc;
+	int online;
+
+	if (IS_ERR(chan)) {
+		dev_err(chip->dev, "Failed to get IIO channel, err = %li\n", PTR_ERR(chan));
+		return PTR_ERR(chan);
+	}
+
+	rc = smb5_wired_source(chip, &online);
+	if (rc < 0)
+		return rc;
+	if (!online) {
+		*val = 0;
+		return 0;
+	}
+
+	return iio_read_channel_processed(chan, val);
+}
+
+/* ADC5_USB_IN_I reports a voltage in uV, not a current. The locked PM8150B
+ * smb5-lib.c specifies 0.2 V/A in buck mode: uV * 5 gives uA. Do not apply
+ * that conversion to OTG/boost; this board profile qualifies wired sink only.
+ */
+int smb5_get_input_current(struct smb5_chip *chip, int *current_ua)
+{
+	unsigned int otg;
+	int online, voltage_uv, ret;
+
+	ret = smb5_wired_source(chip, &online);
+	if (ret)
+		return ret;
+	if (!online) {
+		*current_ua = 0;
+		return 0;
+	}
+	ret = regmap_read(chip->regmap, chip->base + SMB5_DCDC_CMD_OTG, &otg);
+	if (ret)
+		return ret;
+	if (otg & SMB5_OTG_ENABLE)
+		return -ENODATA;
+	ret = smb5_get_iio_chan(chip, chip->usb_in_i_chan, &voltage_uv);
+	if (ret < 0)
+		return ret;
+	if (voltage_uv < 0 || voltage_uv > INT_MAX / 5)
+		return -ERANGE;
+	*current_ua = voltage_uv * 5;
+	return 0;
+}
+
+/* PM8150B's USBIN voltage ADC has a documented high-voltage erratum in
+ * device-matched LOS smb5-lib.c. Use MID_CHG while loaded. With input
+ * suspended MID may be disconnected; use USBIN for no-load checks.
+ * Never substitute the negotiated voltage for a failed physical reading.
+ */
+int smb5_get_input_voltage(struct smb5_chip *chip, int *voltage_uv)
+{
+	unsigned int command;
+	int online, ret;
+	bool suspended;
+
+	ret = smb5_wired_source(chip, &online);
+	if (ret)
+		return ret;
+	if (!online) {
+		*voltage_uv = 0;
+		return 0;
+	}
+	ret = regmap_read(chip->regmap, chip->base + USBIN_CMD_IL, &command);
+	if (ret)
+		return ret;
+	suspended = command & USBIN_SUSPEND_BIT;
+	ret = smb5_get_iio_chan(chip, suspended ? chip->usb_in_v_chan :
+				chip->mid_chg_chan, voltage_uv);
+	if (ret < 0)
+		return ret;
+	/* Same unreliable-MID boundary as LOS, but fail rather than estimate. */
+	return !suspended && *voltage_uv < 1000000 ? -ENODATA : 0;
+}
+
+int smb5_get_prop_health(struct smb5_chip *chip, int *val)
+{
+	int rc;
+	unsigned int stat;
+
+	rc = regmap_read(chip->regmap, chip->base + BATTERY_CHARGER_STATUS_2,
+			 &stat);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read charger status rc=%d\n", rc);
+		return rc;
+	}
+
+	if (stat & CHARGER_ERROR_STATUS_BAT_OV_BIT) {
+		dev_err(chip->dev, "battery over-voltage\n");
+		*val = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
+		return 0;
+	}
+
+	rc = regmap_read(chip->regmap, chip->base + BATTERY_CHARGER_STATUS_7_REG,
+			 &stat);
+	if (rc < 0) {
+		dev_err(chip->dev, "Couldn't read charger status 7 rc=%d\n", rc);
+		return rc;
+	}
+
+	if (stat & (BAT_TEMP_STATUS_TOO_COLD_BIT | BAT_TEMP_STATUS_TOO_COLD_AFP_BIT))
+		*val = POWER_SUPPLY_HEALTH_COLD;
+	else if (stat & (BAT_TEMP_STATUS_TOO_HOT_BIT | BAT_TEMP_STATUS_TOO_HOT_AFP_BIT))
+		*val = POWER_SUPPLY_HEALTH_OVERHEAT;
+	else if (stat & BAT_TEMP_STATUS_COLD_SOFT_BIT)
+		*val = POWER_SUPPLY_HEALTH_COOL;
+	else if (stat & BAT_TEMP_STATUS_HOT_SOFT_BIT)
+		*val = POWER_SUPPLY_HEALTH_WARM;
+	else
+		*val = POWER_SUPPLY_HEALTH_GOOD;
+
+	return 0;
+}
+
+
+/* PM8150B encodings and watchdog semantics from the device's LOS qpnp-smb5.c.
+ * Umi normal FV ceiling is 4.45 V; preserve any lower inherited FV. */
+int smb5_init_hw(struct smb5_chip *chip)
+{
+ unsigned int raw;
+ int rc;
+ rc = regmap_read(chip->regmap, chip->base + FLOAT_VOLTAGE_CFG, &raw);
+ if (rc) return rc;
+ chip->max_fv_uv = min(3600000 + (int)raw * 10000, UMI_CHARGE_MAX_UV);
+ if (chip->max_fv_uv <= 3600000) return -ERANGE;
+ rc = regmap_write(chip->regmap, chip->base + FLOAT_VOLTAGE_CFG,
+                   (chip->max_fv_uv - 3600000) / 10000);
+ if (rc) return rc;
+	rc = regmap_write(chip->regmap, chip->base + FAST_CHARGE_CURRENT_CFG,
+	                  UMI_CHARGE_FCC_UA / CURRENT_SCALE_FACTOR);
+ if (rc) return rc;
+	rc = smb5_set_current_limit(chip, UMI_CHARGE_USB_ICL_UA);
+ if (rc) return rc;
+ /* Keep inherited watchdog intervals; enable bite-to-stop and timer. */
+ rc = regmap_update_bits(chip->regmap, chip->base + SNARL_BARK_BITE_WD_CFG,
+                         BITE_WDOG_DISABLE_CHARGING_CFG_BIT,
+                         BITE_WDOG_DISABLE_CHARGING_CFG_BIT);
+ if (rc) return rc;
+ rc = regmap_update_bits(chip->regmap, chip->base + WD_CFG,
+                         WDOG_TIMER_EN_BIT | WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT,
+                         WDOG_TIMER_EN_BIT | WDOG_TIMER_EN_ON_PLUGIN_BIT | BARK_WDOG_INT_EN_BIT);
+ if (rc) return rc;
+ /* Retain all other thermal settings, ensure the die shutdown comparator. */
+ return regmap_update_bits(chip->regmap, chip->base + 0x670, BIT(0), BIT(0));
+}

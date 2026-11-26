@@ -1,0 +1,18 @@
+[1/7] checking root items
+[2/7] checking extents
+[3/7] checking free space tree
+[4/7] checking fs roots
+[5/7] checking only csums items (without verifying data)
+[6/7] checking root refs
+[7/7] checking quota groups skipped (not enabled on this FS)
+Opening filesystem to check...
+Checking filesystem on /mnt/d/fnos-xiaomi-umi/rootfs-build/output/p0-btrfs-ram-20261125/umi-p0-test.btrfs
+UUID: f6794919-8f17-4855-b3bb-e08c26dc94cc
+found 147456 bytes used, no error found
+total csum bytes: 0
+total tree bytes: 147456
+total fs tree bytes: 32768
+total extent tree bytes: 16384
+btree space waste bytes: 140595
+file data blocks allocated: 0
+ referenced 0

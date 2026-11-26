@@ -1,0 +1,36 @@
+diff --git a/drivers/cpufreq/cpufreq-dt-platdev.c b/drivers/cpufreq/cpufreq-dt-platdev.c
+index 47dd76acd..0a9bc0686 100644
+--- a/drivers/cpufreq/cpufreq-dt-platdev.c
++++ b/drivers/cpufreq/cpufreq-dt-platdev.c
+@@ -178,6 +178,7 @@ static const struct of_device_id blocklist[] __initconst = {
+ 	{ .compatible = "qcom,sm7325", },
+ 	{ .compatible = "qcom,sm8150", },
+ 	{ .compatible = "qcom,sm8250", },
++	{ .compatible = "qcom,kona", },
+ 	{ .compatible = "qcom,sm8350", },
+ 	{ .compatible = "qcom,sm8450", },
+ 	{ .compatible = "qcom,sm8550", },
+diff --git a/drivers/soc/qcom/qcom_pd_mapper.c b/drivers/soc/qcom/qcom_pd_mapper.c
+index 6384f2719..c9506f18b 100644
+--- a/drivers/soc/qcom/qcom_pd_mapper.c
++++ b/drivers/soc/qcom/qcom_pd_mapper.c
+@@ -580,6 +580,7 @@ static const struct of_device_id qcom_pdm_domains[] __maybe_unused = {
+ 	{ .compatible = "qcom,sm7325", .data = sc7280_domains, },
+ 	{ .compatible = "qcom,sm8150", .data = sm8150_domains, },
+ 	{ .compatible = "qcom,sm8250", .data = sm8250_domains, },
++	{ .compatible = "qcom,kona", .data = sm8250_domains, },
+ 	{ .compatible = "qcom,sm8350", .data = sm8350_domains, },
+ 	{ .compatible = "qcom,sm8450", .data = sm8350_domains, },
+ 	{ .compatible = "qcom,sm8550", .data = sm8550_domains, },
+diff --git a/drivers/soc/qcom/ubwc_config.c b/drivers/soc/qcom/ubwc_config.c
+index 15d373bff..6744ecbf2 100644
+--- a/drivers/soc/qcom/ubwc_config.c
++++ b/drivers/soc/qcom/ubwc_config.c
+@@ -265,6 +265,7 @@ static const struct of_device_id qcom_ubwc_configs[] __maybe_unused = {
+ 	{ .compatible = "qcom,sm7325", .data = &sc7280_data, },
+ 	{ .compatible = "qcom,sm8150", .data = &sm8150_data, },
+ 	{ .compatible = "qcom,sm8250", .data = &sm8250_data, },
++	{ .compatible = "qcom,kona", .data = &sm8250_data, },
+ 	{ .compatible = "qcom,sm8350", .data = &sm8350_data, },
+ 	{ .compatible = "qcom,sm8450", .data = &sm8350_data, },
+ 	{ .compatible = "qcom,sm8550", .data = &sm8550_data, },
