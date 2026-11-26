@@ -211,7 +211,7 @@ def read_build(root):
 
 
 def gh(*arguments):
-    return subprocess.check_output(["gh", *arguments], text=True).strip()
+    return subprocess.check_output(["gh", *arguments], encoding="utf-8").strip()
 
 
 def promote(args):
@@ -236,7 +236,7 @@ def promote(args):
             or run["id"] != args.run_id or run["run_attempt"] != args.run_attempt):
         raise ValueError("Not a successful build of the explicitly authorized branch, SHA and attempt")
     tip = json.loads(gh("api", f"repos/{repo}/branches/codex%2Fqualcomm-sm8250"))["commit"]["sha"]
-    relation = json.loads(gh("api", f"repos/{repo}/compare/{args.source}...{tip}"))["status"]
+    relation = json.loads(gh("api", f"repos/{repo}/compare/{args.source}...{tip}?per_page=1"))["status"]
     if relation not in {"ahead", "identical"}:
         raise ValueError("Source commit is no longer on the authorized development branch")
     with tempfile.TemporaryDirectory() as work:
