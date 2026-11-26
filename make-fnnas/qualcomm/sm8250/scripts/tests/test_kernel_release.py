@@ -76,6 +76,24 @@ class KernelReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exact build and package"):
             p.acceptance_record(stale, identity)
 
+    def test_native_acceptance_requires_device_recovery_and_exact_images(self):
+        p = kernel_release
+        identity = {"run_id": 123, "run_attempt": 1, "source_commit": "a" * 40, "linux_commit": "b" * 40,
+                    "version": "6.18.65", "profile": "csot-90", "package_sha256": "c" * 64}
+        record = {**identity, "device": "xiaomi-umi", "scope": "kernel", "result": "pass",
+                  "method": "native-fastboot-flash", "operator": "operator", "tested_at": "date",
+                  "evidence_sha256": "e" * 64, "dtbo_index": 11, "dtbo_sha256": "d" * 64,
+                  "boot_sha256": "e" * 64, "rootfs_sha256": "f" * 64}
+        p.acceptance_record(record, identity)
+        lines = ["UMI_NATIVE: kernel=6.18.65-csot90-sm8250", f"UMI_NATIVE: artifact_sha256={'c' * 64}",
+                 *(f"UMI_NATIVE: {key}={record[key]}" for key in
+                   ("dtbo_index", "dtbo_sha256", "boot_sha256", "rootfs_sha256"))]
+        with self.assertRaisesRegex(ValueError, "incomplete for native-fastboot-flash"):
+            p.verify_evidence(record, identity, "\n".join([*lines, "Android sys.boot_completed=1"]))
+        p.verify_evidence(record, identity, "\n".join([*lines, "UMI_NATIVE: recovery=fastboot-to-fnos"]))
+        with self.assertRaisesRegex(ValueError, "image pair and stock DTBO"):
+            p.acceptance_record({**record, "rootfs_sha256": "invalid"}, identity)
+
     def test_package_round_trip_and_digest_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -112,6 +130,18 @@ class KernelReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "digest or size mismatch"):
                     kernel_release.fetch("owner/repo", version, rate, info, tag, provenance, root / "bad")
             self.assertFalse((root / "bad").exists())
+
+            candidate = SimpleNamespace(output=root / "candidate", profile="csot-90", package_sha256="0" * 64)
+            data = {**provenance, "package_sha256": kernel_release.sha256(bundle)}
+            with patch.object(kernel_release, "check_run"), \
+                 patch.object(kernel_release, "download_candidate", return_value=(bundle, data)):
+                with self.assertRaisesRegex(ValueError, "package SHA-256 mismatch"):
+                    kernel_release.fetch_candidate(candidate)
+                self.assertFalse(candidate.output.exists())
+                candidate.package_sha256 = data["package_sha256"]
+                kernel_release.fetch_candidate(candidate)
+            self.assertFalse((candidate.output / "promotion.json").exists())
+            self.assertEqual(json.loads((candidate.output / "candidate.json").read_text())["status"], "debug-candidate")
 
 
 if __name__ == "__main__":

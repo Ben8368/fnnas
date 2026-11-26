@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-only
-# Internal assembly helper; public image entrypoints fetch promoted kernels only.
+# Internal assembly helper; image entrypoints verify the kernel provenance.
 set -euo pipefail
 [[ $# == 5 ]] || exit 2
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)
@@ -21,7 +21,7 @@ scratch=$(mktemp -d -- "$parent/.umi-boot.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 result=$scratch/output
 mkdir -- "$result"
-# The caller has fetched a release into its own private directory. Use the same verified bytes.
+# Use the same bytes the caller verified in its own private directory.
 cp -a -- "$kernel" "$result/kernel"
 krel=$(< "$result/kernel/include/config/kernel.release")
 unpack_bootimg --boot_img "$boot" --out "$scratch/donor"

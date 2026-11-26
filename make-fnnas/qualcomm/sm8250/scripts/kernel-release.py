@@ -101,10 +101,30 @@ def acceptance_record(record, context):
     if any(record[key] != context[key] for key in required):
         raise ValueError("Acceptance does not identify the exact build and package")
     if (record["result"] != "pass" or record["device"] != "xiaomi-umi"
-            or record["method"] != "fastboot-boot" or record["scope"] != "kernel"
+            or record["method"] not in {"fastboot-boot", "native-fastboot-flash"} or record["scope"] != "kernel"
             or not record["operator"].strip() or not record["tested_at"].strip()
             or not re.fullmatch(HASH, record["evidence_sha256"])):
-        raise ValueError("Missing passed no-flash physical Umi kernel acceptance")
+        raise ValueError("Missing passed physical Umi kernel acceptance")
+    if record["method"] == "native-fastboot-flash":
+        if (type(record["dtbo_index"]) is not int or record["dtbo_index"] < 0
+                or any(not re.fullmatch(HASH, record[key]) for key in
+                       ("dtbo_sha256", "boot_sha256", "rootfs_sha256"))):
+            raise ValueError("Native acceptance must identify the installed image pair and stock DTBO")
+
+
+def verify_evidence(record, context, text):
+    release = f"{context['version']}-csot{PROFILE_RATE[context['profile']]}-sm8250"
+    package = context["package_sha256"]
+    if record["method"] == "native-fastboot-flash":
+        expected = {f"UMI_NATIVE: {key}={record[key]}" for key in
+                    ("dtbo_index", "dtbo_sha256", "boot_sha256", "rootfs_sha256")}
+        expected.update((f"UMI_NATIVE: kernel={release}", f"UMI_NATIVE: artifact_sha256={package}",
+                         "UMI_NATIVE: recovery=fastboot-to-fnos"))
+    else:
+        expected = {f"UMI_PROBE: PID1 kernel={release}", f"UMI_PROBE: artifact_sha256={package}",
+                    "UMI_PROBE_REPORT_END", "Android sys.boot_completed=1"}
+    if not expected <= set(text.splitlines()):
+        raise ValueError(f"Evidence is incomplete for {record['method']}")
 
 
 def describe_release(repo, release, rate, requested):
@@ -174,28 +194,30 @@ def fetch(repo, version, rate, asset, tag, provenance, output):
         if bundle.stat().st_size != asset["size"] or f"sha256:{sha256(bundle)}" != digest:
             raise ValueError(f"Release asset digest or size mismatch: {asset['name']}")
         unpacked = Path(work) / "kernel"
-        module_path = f"lib/modules/{version}-csot{rate}-sm8250"
-        with tarfile.open(bundle, "r:gz") as archive:
-            members = archive.getmembers()
-            seen = set()
-            for member in members:
-                name = member.name
-                allowed = (name in FILES and member.isfile()) or (
-                    (name == module_path or name.startswith(module_path + "/"))
-                    and (member.isdir() or member.isfile())
-                )
-                if not allowed or name in seen or ".." in Path(name).parts:
-                    raise ValueError(f"Unexpected kernel archive member: {name}")
-                seen.add(name)
-            archive.extractall(unpacked, members=members, filter="data")
-        actual_version, actual_rate, _ = read_kernel(unpacked)
-        if (actual_version, actual_rate) != (version, rate) or not (unpacked / module_path / "modules.dep").is_file():
-            raise ValueError(f"Archive contents do not match {asset['name']}")
-        build = read_build(unpacked)
-        if any(build[key] != provenance[key] for key in build):
-            raise ValueError("Published provenance differs from the kernel bundle")
+        unpack_kernel(bundle, version, rate, provenance, unpacked)
         (unpacked / "promotion.json").write_text(json.dumps({**provenance, "tag": tag}, indent=2) + "\n")
         unpacked.rename(output)
+
+
+def unpack_kernel(bundle, version, rate, provenance, output):
+    module_path = f"lib/modules/{version}-csot{rate}-sm8250"
+    with tarfile.open(bundle, "r:gz") as archive:
+        members = archive.getmembers()
+        seen = set()
+        for member in members:
+            name = member.name
+            allowed = (name in FILES and member.isfile()) or (
+                (name == module_path or name.startswith(module_path + "/"))
+                and (member.isdir() or member.isfile())
+            )
+            if not allowed or name in seen or ".." in Path(name).parts:
+                raise ValueError(f"Unexpected kernel archive member: {name}")
+            seen.add(name)
+        archive.extractall(output, members=members, filter="data")
+    build = read_build(output)
+    if (not (output / module_path / "modules.dep").is_file()
+            or any(build[key] != provenance[key] for key in build)):
+        raise ValueError(f"Archive contents or provenance do not match {bundle.name}")
 
 
 def read_build(root):
@@ -214,21 +236,12 @@ def gh(*arguments):
     return subprocess.check_output(["gh", *arguments], encoding="utf-8").strip()
 
 
-def promote(args):
-    if args.publish and gh("api", "user", "--jq", ".login").casefold() != PUBLISH_OPERATOR.casefold():
-        raise ValueError("Publication requires the authorized maintainer's local GitHub credential")
+def check_run(args):
     if args.profile not in PROFILE_RATE or not re.fullmatch(SHA, args.source):
         raise ValueError("Require a full source SHA and a release profile")
     if min(args.run_id, args.run_attempt) < 1:
         raise ValueError("Require positive run ID and attempt")
     repo = PUBLISH_REPO
-    destination = args.release_repo or repo
-    if not re.fullmatch(r"Ben8368/[A-Za-z0-9_.-]+", destination, re.IGNORECASE):
-        raise ValueError("The release target must be a maintainer-owned GitHub repository")
-    destination_data = json.loads(gh("api", f"repos/{destination}"))
-    if destination_data["private"] or destination_data["owner"]["login"].casefold() != PUBLISH_OPERATOR.casefold():
-        raise ValueError("The release catalog must be public and maintainer-owned")
-    destination = destination_data["full_name"]
     run = json.loads(gh("api", f"repos/{repo}/actions/runs/{args.run_id}/attempts/{args.run_attempt}"))
     if (run["head_repository"]["full_name"] != repo or run["head_branch"] != PUBLISH_BRANCH
             or run["head_sha"] != args.source or run["conclusion"] != "success"
@@ -239,30 +252,71 @@ def promote(args):
     relation = json.loads(gh("api", f"repos/{repo}/compare/{args.source}...{tip}?per_page=1"))["status"]
     if relation not in {"ahead", "identical"}:
         raise ValueError("Source commit is no longer on the authorized development branch")
+
+
+def download_candidate(args, root):
+    gh("run", "download", str(args.run_id), "--repo", PUBLISH_REPO, "--dir", str(root),
+       "--name", f"umi-{args.profile}-{args.run_id}-{args.run_attempt}")
+    rate = PROFILE_RATE[args.profile]
+    bundles = [path for path in root.iterdir() if ASSET.fullmatch(path.name)]
+    if len(bundles) != 1 or not bundles[0].is_file():
+        raise ValueError("Expected one kernel bundle")
+    bundle, = bundles
+    with tarfile.open(bundle, "r:gz") as archive:
+        identity = json.load(archive.extractfile("build.json"))
+        patches = archive.extractfile("armbian-patches.tsv").read()
+        linux = archive.extractfile("kernel-source.tsv").read().decode().split()
+    match = ASSET.fullmatch(bundle.name)
+    version = match["version"]
+    if (len(linux) != 2 or identity != {"source_commit": args.source, "linux_commit": linux[1],
+                                       "profile": args.profile, "version": version,
+                                       "patches_sha256": hashlib.sha256(patches).hexdigest()}
+            or match["rate"] != rate or linux[0] != version or not re.fullmatch(SHA, linux[1])
+            or (root / "project.sha").read_text().strip() != args.source
+            or (root / "kernel-source.tsv").read_text().split() != linux
+            or (root / "armbian-patches.tsv").read_bytes() != patches):
+        raise ValueError("Artifact provenance does not match the run")
+    return bundle, {**identity, "schema": 1, "build_repository": PUBLISH_REPO, "branch": PUBLISH_BRANCH,
+                    "run_id": args.run_id, "run_attempt": args.run_attempt, "package_sha256": sha256(bundle)}
+
+
+def fetch_candidate(args):
+    output = args.output
+    if output.exists() or output.is_symlink():
+        raise ValueError(f"Output already exists: {output}")
+    if not re.fullmatch(HASH, args.package_sha256):
+        raise ValueError("Require the candidate package SHA-256")
+    check_run(args)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent) as work:
+        root = Path(work)
+        bundle, data = download_candidate(args, root)
+        if data["package_sha256"] != args.package_sha256:
+            raise ValueError("Candidate package SHA-256 mismatch")
+        unpacked = root / "kernel-files"
+        unpack_kernel(bundle, data["version"], PROFILE_RATE[args.profile], data, unpacked)
+        (unpacked / "candidate.json").write_text(json.dumps({**data, "status": "debug-candidate"}, indent=2) + "\n")
+        unpacked.rename(output)
+
+
+def promote(args):
+    if args.publish and gh("api", "user", "--jq", ".login").casefold() != PUBLISH_OPERATOR.casefold():
+        raise ValueError("Publication requires the authorized maintainer's local GitHub credential")
+    repo = PUBLISH_REPO
+    destination = args.release_repo or repo
+    if not re.fullmatch(r"Ben8368/[A-Za-z0-9_.-]+", destination, re.IGNORECASE):
+        raise ValueError("The release target must be a maintainer-owned GitHub repository")
+    destination_data = json.loads(gh("api", f"repos/{destination}"))
+    if destination_data["private"] or destination_data["owner"]["login"].casefold() != PUBLISH_OPERATOR.casefold():
+        raise ValueError("The release catalog must be public and maintainer-owned")
+    destination = destination_data["full_name"]
+    check_run(args)
     with tempfile.TemporaryDirectory() as work:
         root = Path(work)
-        gh("run", "download", str(args.run_id), "--repo", repo, "--dir", work,
-           "--name", f"umi-{args.profile}-{args.run_id}-{args.run_attempt}")
+        bundle, data = download_candidate(args, root)
+        data["repository"] = destination
         rate = PROFILE_RATE[args.profile]
-        bundles = [path for path in root.iterdir() if ASSET.fullmatch(path.name)]
-        if len(bundles) != 1 or not bundles[0].is_file():
-            raise ValueError("Expected one kernel bundle")
-        bundle, = bundles
-        # Read only identity files; never extract a CI archive onto the publishing host.
-        with tarfile.open(bundle, "r:gz") as archive:
-            identity = json.load(archive.extractfile("build.json"))
-            patches = archive.extractfile("armbian-patches.tsv").read()
-            linux = archive.extractfile("kernel-source.tsv").read().decode().split()
-        match = ASSET.fullmatch(bundle.name)
-        version = match["version"]
-        if (identity != {"source_commit": args.source, "linux_commit": linux[1], "profile": args.profile,
-                         "version": version, "patches_sha256": hashlib.sha256(patches).hexdigest()}
-                or match["rate"] != rate or linux[0] != version or not re.fullmatch(SHA, linux[1])
-                or (root / "project.sha").read_text().strip() != args.source
-                or (root / "armbian-patches.tsv").read_bytes() != patches):
-            raise ValueError("Artifact provenance does not match the run")
-        data = {**identity, "schema": 1, "repository": destination, "build_repository": repo, "branch": PUBLISH_BRANCH,
-                "run_id": args.run_id, "run_attempt": args.run_attempt, "package_sha256": sha256(bundle)}
+        version = data["version"]
         record = json.loads(args.acceptance.read_text(encoding="utf-8"))
         acceptance_record(record, data)
         evidence = root / "device-evidence.log"
@@ -271,15 +325,7 @@ def promote(args):
         shutil.copyfile(args.evidence, evidence)
         if sha256(evidence) != record["evidence_sha256"]:
             raise ValueError("Physical device evidence digest mismatch")
-        text = evidence.read_text(encoding="utf-8", errors="replace")
-        expected_lines = (
-            f"UMI_PROBE: PID1 kernel={version}-csot{rate}-sm8250",
-            f"UMI_PROBE: artifact_sha256={data['package_sha256']}",
-            "UMI_PROBE_REPORT_END",
-            "Android sys.boot_completed=1",
-        )
-        if not set(expected_lines) <= set(text.splitlines()):
-            raise ValueError("Evidence is missing the exact package ID, PID 1, USB report or Android recovery")
+        verify_evidence(record, data, evidence.read_text(encoding="utf-8", errors="replace"))
         data["acceptance"] = record
         tag = tag_for(version, rate, args.source)
         print(json.dumps({**data, "tag": tag}, indent=2))
@@ -330,16 +376,23 @@ def main():
     package.add_argument("--profile", required=True, choices=PROFILE_RATE)
     package.add_argument("--source", required=True)
     promotion = commands.add_parser("promote", help="verify a physical acceptance and optionally publish")
-    promotion.add_argument("--source", required=True)
-    promotion.add_argument("--profile", required=True, choices=PROFILE_RATE)
-    promotion.add_argument("--run-id", required=True, type=int)
-    promotion.add_argument("--run-attempt", required=True, type=int)
+    candidate = commands.add_parser("fetch-candidate", help="verify and unpack one CI build for local debugging")
+    candidate.add_argument("output", type=Path)
+    candidate.add_argument("--package-sha256", required=True)
+    for request in (promotion, candidate):
+        request.add_argument("--source", required=True)
+        request.add_argument("--profile", required=True, choices=PROFILE_RATE)
+        request.add_argument("--run-id", required=True, type=int)
+        request.add_argument("--run-attempt", required=True, type=int)
     promotion.add_argument("--acceptance", required=True, type=Path)
     promotion.add_argument("--evidence", required=True, type=Path)
     promotion.add_argument("--release-repo", help="separate public catalog owned by the maintainer")
     promotion.add_argument("--publish", action="store_true", help="create tag and release (default: verify only)")
     args = parser.parse_args()
     try:
+        if args.command == "fetch-candidate":
+            fetch_candidate(args)
+            return
         if args.command == "promote":
             promote(args)
             return

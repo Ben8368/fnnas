@@ -16,6 +16,7 @@ if bash renas -b xiaomi-umi -k 6.18.y -a false kernel query --help; then
 fi
 bash renas -b xiaomi-umi build --help
 bash renas -r Ben8368/fnnas -k 6.18.y --Autokernel true -b xiaomi-umi -- native --help
+bash renas -b xiaomi-umi native-debug --help
 if bash renas -s 6000 -b xiaomi-umi native --help; then
     echo 'An unsupported upstream option reached the Umi backend.' >&2
     exit 1

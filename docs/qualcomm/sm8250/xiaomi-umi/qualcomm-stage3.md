@@ -8,9 +8,10 @@
 
 ## 内核真机验收与提升
 
-1. 下载 `umi-<profile>-<RunID>-<Attempt>` Actions artifact 并保存摘要。不用历史探针或相似版本替代本次构建。运行 `bash make-fnnas/qualcomm/sm8250/scripts/acceptance-probe.sh DONOR_BOOT KERNEL_PACKAGE NEW_PROBE.img`。产生的镜像仅供 RAM 启动；核对该探针的 DTB 与**设备当前** DTBO 的 preflight 再运行，参见 [无刷写验收](./04-真机无刷写验收.md)。设备没有恢复 Android、无法取得当次 USB 报告、或 overlay 校验失败，都不能提升。探针 PID 1 不挂载 Android 数据分区。
-2. 收集未经合成的当次 USB 报告、面板/DTBO 核对结果、Probe SHA-256，以及恢复 Android 的 `sys.boot_completed=1`。将实际观测到的恢复结果记为 `Android sys.boot_completed=1` 行；报告应含 `UMI_PROBE: PID1 kernel=...`、`UMI_PROBE: artifact_sha256=...` 和 `UMI_PROBE_REPORT_END`。去除设备序列号等个人标识，再对最终报告计算 SHA-256。
-3. 验收 JSON 包含 `source_commit`、`linux_commit`、`profile`、整数 `run_id`、整数 `run_attempt`、`package_sha256`、`evidence_sha256`、`operator`、`tested_at`，以及 `device: "xiaomi-umi"`、`scope: "kernel"`、`method: "fastboot-boot"`、`result: "pass"`。维护者需人工审查报告；工具核对身份与字节，不能独立证明物理观测真伪。
+下载 `umi-<profile>-<RunID>-<Attempt>` Actions artifact 并保存摘要。验收 JSON 包含 `source_commit`、`linux_commit`、`profile`、整数 `run_id`、整数 `run_attempt`、`package_sha256`、`evidence_sha256`、`operator`、`tested_at`，以及 `device: "xiaomi-umi"`、`scope: "kernel"`、`result: "pass"`。维护者审查原始报告和设备实测结果，去除设备序列号等个人标识后对最终报告计算 SHA-256。
+
+- **原生 fnOS 上机调试**使用 `native-debug`。在维护者授权安装前，核对设备、原厂 DTBO、安装目标和镜像摘要。保留安装日志、串口内核版本与 `/etc/umi-build/kernel-candidate.json`、实际进入 Fastboot 以及从 Fastboot 回到 fnOS 的记录。验收 JSON 使用 `method: "native-fastboot-flash"`，还需整数 `dtbo_index` 以及 `dtbo_sha256`、`boot_sha256`、`rootfs_sha256`。从实际观测抄录 `UMI_NATIVE: kernel=...`、`UMI_NATIVE: artifact_sha256=...`、`UMI_NATIVE: recovery=fastboot-to-fnos`，并为四个 DTBO/镜像字段各记录一条 `UMI_NATIVE: 字段=值`。另外记录 fnOS 用户态和 OTA 的验收范围。
+- **保留 Android 的 RAM 探针**使用 `method: "fastboot-boot"`，按 [无刷写验收](./04-真机无刷写验收.md) 操作。保留当次 `UMI_PROBE: PID1 kernel=...`、`UMI_PROBE: artifact_sha256=...` 和 `UMI_PROBE_REPORT_END`，以及实际恢复到 Android 的 `Android sys.boot_completed=1` 记录。
 
 ```bash
 python3 make-fnnas/qualcomm/sm8250/scripts/kernel-release.py promote \
@@ -18,7 +19,7 @@ python3 make-fnnas/qualcomm/sm8250/scripts/kernel-release.py promote \
   --acceptance acceptance.json --evidence device-evidence.log
 ```
 
-仅在核对测试和许可后，加 `--publish`。工具先建指向准确 SHA 的轻量标签，上传草稿，然后用 GitHub API 核对上传 SHA-256 和标签，最后才公开；失败保留草稿供人工检查，不会覆盖既有标签/资产。可传 `--release-repo Ben8368/<专用仓库>` 隔离上游 `Delete older releases and workflows` 的定期/手动清理；新仓库须由维护者准备且公开，工具仅推准确源码标签，不推分支。镜像构建用 `-r` 指向同一仓库。若留在 fork，运行上游清理前须在保留关键词中包含 `umi-kernel-`。公开 Release 的 JSON 说明及实际验收日志是正式镜像选版的依据。没有合格 Release 时镜像构建应当失败，不允许将 CI 包或 Debian 基线当作替代。
+仅在核对测试和许可后，加 `--publish`。工具先建指向准确 SHA 的轻量标签，上传草稿，然后用 GitHub API 核对上传 SHA-256 和标签，最后才公开；失败保留草稿供人工检查，不会覆盖既有标签/资产。可传 `--release-repo Ben8368/<专用仓库>` 隔离上游 `Delete older releases and workflows` 的定期/手动清理；新仓库须由维护者准备且公开，工具仅推准确源码标签，不推分支。镜像构建用 `-r` 指向同一仓库。若留在 fork，运行上游清理前须在保留关键词中包含 `umi-kernel-`。正式镜像依据公开 Release 选版。`native-debug` 通过明确指定的 CI Run 与 Attempt 获取本地调试候选。
 
 ## 官方底包和原生镜像
 
@@ -35,6 +36,16 @@ sudo bash renas -b xiaomi-umi -k 6.18.60 -a false native \
 ```
 
 `native` 的底包位置可为 `-`（自动获取锁定包），输入需为可重读文件，工作目录用原生 Linux 文件系统。要求 `python3-guestfs`、可用的 appliance 内核、`btrfs-progs`、`rsync`、`mkbootimg`、`cpio`、`kmod`、`initramfs-tools-core`、`uuid-runtime`。固件 tar 仅放用户有权取得的 `qcom/`、`ath11k/` 下的常规文件，至少包含 `qcom/sm8250/a650_zap.mbn`、`qcom/a650_gmu.bin` 和 `qcom/a650_sqe.fw`；这些不是全量外设验收清单。固件 tar 整体摘要及每文件摘要都会保留。`action.yml` 的 `fnnas_board: xiaomi-umi` 使用同一入口，新增 `umi_boot_donor`、`umi_firmware_tar`、`umi_firmware_sha256`、`umi_refresh`。其他三个平台仍走原有 action 步骤。
+
+`native-debug` 从已登录的 `gh` 核验和下载指定候选包，预检对应设备的原厂 DTBO，然后按同一底包和布局生成调试镜像。候选身份记录在输出目录和镜像的 `/etc/umi-build/kernel-candidate.json`。镜像组装和设备安装分别执行。
+
+```bash
+sudo bash renas -b xiaomi-umi native-debug \
+  "$FNOS_BASE" "$DONOR_BOOT" "$FIRMWARE_TAR" "$FIRMWARE_SHA256" "$NEW_OUTPUT" \
+  "$STOCK_DTBO" "$DTBO_INDEX" \
+  --source "$FULL_SHA" --profile csot-90 --run-id "$RUN_ID" --run-attempt "$ATTEMPT" \
+  --package-sha256 "$PACKAGE_SHA256"
+```
 
 上游下载步骤主要检查下载成功及文件格式，未给该自动选择路径逐个锁定 SHA-256；本分支新增压缩字节的 SHA-256 和大小检查。
 
