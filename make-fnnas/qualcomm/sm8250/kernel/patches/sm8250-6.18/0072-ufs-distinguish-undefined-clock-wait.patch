@@ -2,9 +2,10 @@ Subject: [PATCH] scsi: ufs: Distinguish an unspecified clock wait from a read er
 
 UFS devices may return 00h for an undefined bRefClkGatingWaitTime.
 A successful query with that value still needs the conservative default
-but it is not a query error. Keep a warning with the selected delay and
-preserve the error and return status of a failed query. Assign the fallback
-explicitly on failure instead of relying on the output of the query.
+but it is not a query error. Log the unspecified value at info level
+while preserving the selected delay and the error and return status of a
+failed query. Assign the fallback explicitly on failure instead of relying
+on the output of the query.
 
 Found on WDC SDINEDK4-256G 1088 in Xiaomi Umi. The 255 us default and the
 clock gating policy are unchanged.
@@ -30,7 +31,7 @@ index 572c0510d..e4adb9cd9 100644
  			gating_wait = UFSHCD_REF_CLK_GATING_WAIT_US;
 -			dev_err(hba->dev, "Undefined ref clk gating wait time, use default %uus\n",
 -					 gating_wait);
-+			dev_warn(hba->dev, "Undefined ref clk gating wait time, use default %uus\n",
++			dev_info(hba->dev, "Undefined ref clk gating wait time, use default %uus\n",
 +				 gating_wait);
  		}
  
