@@ -1,0 +1,37 @@
+Subject: [PATCH] scsi: ufs: Distinguish an unspecified clock wait from a read error
+
+UFS devices may return 00h for an undefined bRefClkGatingWaitTime.
+A successful query with that value still needs the conservative default
+but it is not a query error. Keep a warning with the selected delay and
+preserve the error and return status of a failed query. Assign the fallback
+explicitly on failure instead of relying on the output of the query.
+
+Found on WDC SDINEDK4-256G 1088 in Xiaomi Umi. The 255 us default and the
+clock gating policy are unchanged.
+
+diff --git a/drivers/ufs/core/ufshcd.c b/drivers/ufs/core/ufshcd.c
+index 572c0510d..e4adb9cd9 100644
+--- a/drivers/ufs/core/ufshcd.c
++++ b/drivers/ufs/core/ufshcd.c
+@@ -3899,14 +3899,15 @@ static int ufshcd_get_ref_clk_gating_wait(struct ufs_hba *hba)
+ 		err = ufshcd_query_attr_retry(hba, UPIU_QUERY_OPCODE_READ_ATTR,
+ 				QUERY_ATTR_IDN_REF_CLK_GATING_WAIT_TIME, 0, 0,
+ 				&gating_wait);
+-		if (err)
++		if (err) {
++			gating_wait = UFSHCD_REF_CLK_GATING_WAIT_US;
+ 			dev_err(hba->dev, "Failed reading bRefClkGatingWait. err = %d, use default %uus\n",
+-					 err, gating_wait);
+-
+-		if (gating_wait == 0) {
++				err, gating_wait);
++		} else if (!gating_wait) {
++			/* A successful read can return zero (no timing specified). */
+ 			gating_wait = UFSHCD_REF_CLK_GATING_WAIT_US;
+-			dev_err(hba->dev, "Undefined ref clk gating wait time, use default %uus\n",
+-					 gating_wait);
++			dev_warn(hba->dev, "Undefined ref clk gating wait time, use default %uus\n",
++				 gating_wait);
+ 		}
+ 
+ 		hba->dev_info.clk_gating_wait_us = gating_wait;

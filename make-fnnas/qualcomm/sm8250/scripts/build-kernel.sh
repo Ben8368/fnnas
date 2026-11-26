@@ -51,18 +51,20 @@ fi
 printf '%s\t%s\tapplied\tCPUfreq and PD mapper hunks\n' "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
 printf '%s:ubwc_config.c\t%s\treviewed-skip\tNative DSI port handles UBWC; preserve upstream table\n' \
     "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
-patch_path="$port/patches/sm8250-6.18/0071-usb-typec-qcom-complete-pdphy-signal-tx.patch"
-patch_sha=$(sha256sum < "$patch_path")
-patch_sha=${patch_sha%% *}
-if git -C linux apply --reverse --check -- "$patch_path" 2>/dev/null; then
-    status=already-present
-elif git -C linux apply -- "$patch_path"; then
-    status=applied
-else
-    printf '%s\t%s\tconflict\tFailed to apply PD PHY signal TX completion\n' "${patch_path##*/}" "$patch_sha" >> "$patch_manifest"
-    exit 1
-fi
-printf '%s\t%s\t%s\tComplete the TCPM transmit on sig-tx\n' "${patch_path##*/}" "$patch_sha" "$status" >> "$patch_manifest"
+for name in 0071-usb-typec-qcom-complete-pdphy-signal-tx.patch 0072-ufs-distinguish-undefined-clock-wait.patch; do
+    patch_path="$port/patches/sm8250-6.18/$name"
+    patch_sha=$(sha256sum < "$patch_path")
+    patch_sha=${patch_sha%% *}
+    if git -C linux apply --reverse --check -- "$patch_path" 2>/dev/null; then
+        status=already-present
+    elif git -C linux apply -- "$patch_path"; then
+        status=applied
+    else
+        printf '%s\t%s\tconflict\tRequired Umi runtime patch\n' "$name" "$patch_sha" >> "$patch_manifest"
+        exit 1
+    fi
+    printf '%s\t%s\t%s\tRequired Umi runtime patch\n' "$name" "$patch_sha" "$status" >> "$patch_manifest"
+done
 if [[ $patch_manifest != "$work/armbian-patches.tsv" ]]; then
     cp -- "$patch_manifest" "$work/armbian-patches.tsv"
 fi
