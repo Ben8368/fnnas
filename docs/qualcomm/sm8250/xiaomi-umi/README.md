@@ -22,7 +22,7 @@ UMI 适配来自 `Ben8368/fnos-xiaomi-umi`，硬件与引导基线来自 `misaka
 
 ## 原生 fnOS 适配架构
 
-[原生 fnOS 真机验收](./03-自行构建.md#原生-fnos-真机验收)默认用 60 Hz 内核候选，在 Linux 本地组装可写入 Umi 的配套镜像，验证 fnOS 首启、WebUI、存储和重启恢复。[RAM 探针](./04-真机无刷写验收.md)可用于保留 Android 的内核诊断。
+[原生 fnOS 真机验收](./03-自行构建.md#原生-fnos-真机验收)默认用 90 Hz 原生显示内核候选，在 Linux 本地组装可写入 Umi 的配套镜像，验证 fnOS 首启、WebUI、存储和重启恢复。[RAM 探针](./04-真机无刷写验收.md)可用于保留 Android 的内核诊断。
 
 `renas -b xiaomi-umi` 支持官方 ARM64 底包审计和 RootFS 提取。经审查的覆盖文件按 SM8250 平台、小米 10 机型的顺序应用。`native` 从校验过的官方底包组装，使用已通过物理验收并提升的 UMI 内核及同版模块生成 ABL v2 Boot 与 RootFS 配套镜像。[构建命令](./03-自行构建.md)
 

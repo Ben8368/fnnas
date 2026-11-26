@@ -19,7 +19,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: kernel-${{ github.ref }}-${{ github.sha }}-${{ vars.UMI_KERNEL_PROFILE || 'release' }}
+  group: kernel-${{ github.ref }}-${{ github.sha }}-${{ vars.UMI_KERNEL_PROFILE || 'csot-90' }}
   cancel-in-progress: false
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
     env:
-      PROFILE: ${{ vars.UMI_KERNEL_PROFILE || 'release' }}
+      PROFILE: ${{ vars.UMI_KERNEL_PROFILE || 'csot-90' }}
       WITH_DEBIAN_BASELINE: 'false'
       UMI_KERNEL_VERSION: 'auto'
       PACKAGE_UMI_KERNEL: 'true'

@@ -1,5 +1,5 @@
 # Pin the source snapshot for each native display profile.
-case ${CSOT_REFRESH:-60} in
+case ${CSOT_REFRESH:-90} in
     60)
         display_source_rev=3263cff0483f9cfa66c5ac693d759b4c7a6710d2
         display_source=$here/../../../sources/display-60 ;;

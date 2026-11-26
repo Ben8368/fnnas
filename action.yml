@@ -52,7 +52,7 @@ inputs:
     required: false
   umi_refresh:
     description: "Select an accepted Umi kernel profile: 60 or 90 Hz."
-    default: "60"
+    default: "90"
     required: false
   # For compile kernel -----
   debs_repo:

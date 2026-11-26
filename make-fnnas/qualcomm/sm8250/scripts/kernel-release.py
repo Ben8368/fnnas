@@ -365,7 +365,7 @@ def main():
     for command in ("query", "fetch"):
         request = commands.add_parser(command)
         request.add_argument("--repo", default="Ben8368/fnnas")
-        request.add_argument("--refresh", choices=("60", "90"), default="60")
+        request.add_argument("--refresh", choices=("60", "90"), default="90")
         request.add_argument("--version", default="auto")
         if command == "fetch":
             request.add_argument("output", type=Path)

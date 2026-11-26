@@ -3,7 +3,7 @@
 ## CI 与发布职责
 
 - `main` 保持为默认分支，只与 `ophub/fnnas/main` 快进同步。分支专用的工作流不放到 `main`。GitHub 要求 `workflow_dispatch` 文件先存在于默认分支，因此 Umi 工作流运行入口为 `codex/qualcomm-sm8250` 和 `pr/qualcomm-*` 的 `push`。要对同一 SHA 重试，使用 `gh run rerun RUN_ID -R Ben8368/fnnas`，并记录新的 Attempt。`pr/qualcomm-*` 能跑 CI，不是授权发布分支。
-- `Build Umi kernel` 在每次相关分支推送时查询 kernel.org 的最新正式 6.18.y 标签，并使用解析出的同一 Linux 提交编译和验证。`kernel-source.tsv` 记录实际版本和 Linux SHA。默认 profile 为 `release`（CSOT 60 Hz），可通过 Actions 变量 `UMI_KERNEL_PROFILE` 选择其他 profile。历史复现可在本地使用 `UMI_KERNEL_VERSION=locked`（6.18.60）或指定具体版本。补丁必须零 fuzz，或者反向应用检查证明已存在。跳过须匹配名称和摘要，并记录理由。遇到未知冲突停止构建。Armbian `0021` 只调整 Makefile 上下文，未更改驱动内容。
+- `Build Umi kernel` 在每次相关分支推送时查询 kernel.org 的最新正式 6.18.y 标签，并使用解析出的同一 Linux 提交编译和验证。`kernel-source.tsv` 记录实际版本和 Linux SHA。默认 profile 为 `csot-90`（CSOT 90 Hz），可通过 Actions 变量 `UMI_KERNEL_PROFILE` 选择其他 profile。历史复现可在本地使用 `UMI_KERNEL_VERSION=locked`（6.18.60）或指定具体版本。补丁必须零 fuzz，或者反向应用检查证明已存在。跳过须匹配名称和摘要，并记录理由。遇到未知冲突停止构建。Armbian `0021` 只调整 Makefile 上下文，未更改驱动内容。
 - 构建 job 只有 `contents: read`。删除旧的 `publish-umi-kernel.yml`；不再修改共用的 `kernel_fnnas` Release。新标签形如 `umi-kernel-6.18.60-csot60-<40位源码SHA>`，直指源码提交。发布只接受 `Ben8368/fnnas:codex/qualcomm-sm8250` 上 workflow 路径、指定 full SHA、Run ID、Attempt、profile 均吻合且成功的 push 构建；发布权限在本机维护者凭据中。`--publish` 前默认只审查，不写远端。
 
 ## 内核真机验收与提升
@@ -17,7 +17,7 @@
 
 ```bash
 python3 make-fnnas/qualcomm/sm8250/scripts/kernel-release.py promote \
-  --source "$FULL_SHA" --profile release --run-id "$RUN_ID" --run-attempt "$ATTEMPT" \
+  --source "$FULL_SHA" --profile csot-90 --run-id "$RUN_ID" --run-attempt "$ATTEMPT" \
   --acceptance acceptance.json --evidence device-evidence.log
 ```
 
@@ -32,9 +32,9 @@ bash renas -b xiaomi-umi download /path/to/fnos.img.xz
 sudo env FNOS_PYTHON=/usr/bin/python3 LIBGUESTFS_BACKEND=direct LIBGUESTFS_BACKEND_SETTINGS=force_tcg \
   bash renas -b xiaomi-umi inspect /path/to/fnos.img.xz --sha256 locked \
     --output /path/to/audit --rootfs-archive /path/to/rootfs.tar
-sudo bash renas -b xiaomi-umi -k 6.18.60 -a false native \
+sudo bash renas -b xiaomi-umi -k 6.18.y -a true native \
   /path/to/fnos.img.xz /path/to/umi-boot-donor.img /path/to/firmware.tar "$FIRMWARE_SHA256" \
-  /path/to/new-output --refresh 60
+  /path/to/new-output --refresh 90
 ```
 
 `native` 的底包位置可为 `-`（自动获取锁定包），输入需为可重读文件，工作目录用原生 Linux 文件系统。要求 `python3-guestfs`、可用的 appliance 内核、`btrfs-progs`、`rsync`、`mkbootimg`、`cpio`、`kmod`、`initramfs-tools-core`、`uuid-runtime`。固件 tar 仅放用户有权取得的 `qcom/`、`ath11k/` 下的常规文件，至少包含 `qcom/sm8250/a650_zap.mbn`、`qcom/a650_gmu.bin` 和 `qcom/a650_sqe.fw`；这些不是全量外设验收清单。固件 tar 整体摘要及每文件摘要都会保留。`action.yml` 的 `fnnas_board: xiaomi-umi` 使用同一入口，新增 `umi_boot_donor`、`umi_firmware_tar`、`umi_firmware_sha256`、`umi_refresh`。其他三个平台仍走原有 action 步骤。

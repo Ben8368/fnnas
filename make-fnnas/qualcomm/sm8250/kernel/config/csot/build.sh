@@ -8,7 +8,7 @@ fi
 work=$(realpath -e -- "$1")
 here=$(cd -- "$(dirname -- "$0")" && pwd)
 cd "$work"
-rate=${CSOT_REFRESH:-60}
+rate=${CSOT_REFRESH:-90}
 export CSOT_REFRESH="$rate" CSOT_LAB="${CSOT_LAB:-0}"
 rx_profile=${CSOT_RX_PROFILE:-off}
 export CSOT_RX_PROFILE="$rx_profile"

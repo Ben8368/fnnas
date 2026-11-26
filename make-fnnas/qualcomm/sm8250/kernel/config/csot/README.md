@@ -1,6 +1,6 @@
 # CSOT native display
 
-Release builds include native display by default. `CSOT_REFRESH=60` (default) and `90` select separate fixed-mode kernels, not a runtime refresh switch. The exact source trees used for each profile are checked into [`sources/`](../../../sources/), so clean builds need no network access for display code. The lab profile adds the separate `board-lab/` source snapshot. See [release build](../../../../../../tools/legacy/rootfs-build/BUILD.md) and the [source dependency audit](../../../../../../tools/legacy/rootfs-build/SOURCES.md).
+Release builds include native display by default. `CSOT_REFRESH=90` (default) and `60` select separate fixed-mode kernels at build time. The exact source trees used for each profile are checked into [`sources/`](../../../sources/), so clean builds need no network access for display code. The lab profile adds the separate `board-lab/` source snapshot. See [release build](../../../../../../tools/legacy/rootfs-build/BUILD.md) and the [source dependency audit](../../../../../../tools/legacy/rootfs-build/SOURCES.md).
 
 | Mode | Locked source revision | Hardware result |
 |---|---|---|
