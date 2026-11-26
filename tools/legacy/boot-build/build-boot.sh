@@ -26,7 +26,7 @@ REL="$(cd "$DIR/.." && pwd)"
 REPO="$(cd "$REL/../.." && pwd)"
 TOOLS="$REPO/make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools"
 
-DTS="${DTS:-$REL/dtb/slim-ovf-wifi6-gpu-oc-final.dts}"
+DTS="${DTS:-$REPO/make-fnnas/qualcomm/sm8250/kernel/dts-donor.dts}"
 BASE="${1:-$REL/boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img}"
 OUT="${2:-$REPO/out/legacy-boot/boot-rebuilt.img}"
 OUTDIR="$REPO/out/legacy-boot"
