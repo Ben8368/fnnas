@@ -2,7 +2,7 @@ name: UMI CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [codex/qualcomm-sm8250, 'pr/qualcomm-*']
 
 permissions:
   contents: read
