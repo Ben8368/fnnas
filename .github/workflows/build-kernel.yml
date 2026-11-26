@@ -1,7 +1,7 @@
 name: Build Umi kernel
 on:
   push:
-    branches: [main]
+    branches: [codex/qualcomm-sm8250, 'pr/qualcomm-*']
     paths:
       - '.github/workflows/build-kernel.yml'
       - 'make-fnnas/qualcomm/sm8250/**'
@@ -21,7 +21,7 @@ on:
       kernel_version:
         description: Linux 6.18.y source (auto, locked, or 6.18.x)
         type: string
-        default: auto
+        default: locked
       with_debian_baseline:
         description: Also rebuild the historical Debian image pair (release profiles)
         type: boolean
@@ -40,7 +40,7 @@ jobs:
     env:
       PROFILE: ${{ inputs.profile || 'release' }}
       WITH_DEBIAN_BASELINE: ${{ inputs.with_debian_baseline || false }}
-      UMI_KERNEL_VERSION: ${{ inputs.kernel_version || 'auto' }}
+      UMI_KERNEL_VERSION: ${{ inputs.kernel_version || 'locked' }}
       PACKAGE_UMI_KERNEL: 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
