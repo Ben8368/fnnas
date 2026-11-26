@@ -6,12 +6,13 @@ scripts=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 series=
 automatic=
 release_args=()
-while [[ ${1:-} == -k || ${1:-} == -a || ${1:-} == -r ]]; do
+while [[ ${1:-} == -* && $1 != --help && $1 != -h ]]; do
     if (($# < 2)); then echo "Missing value for $1" >&2; exit 2; fi
     case $1 in
-        -k) series=$2 ;;
-        -a) automatic=$2 ;;
-        -r) release_args+=(--repo "${2#https://github.com/}") ;;
+        -k|--Kernel) series=$2 ;;
+        -a|--Autokernel) automatic=$2 ;;
+        -r|--kernelRepository) release_args+=(--repo "${2#https://github.com/}") ;;
+        *) echo "Unsupported Qualcomm option: $1" >&2; exit 2 ;;
     esac
     shift 2
 done
@@ -32,8 +33,8 @@ if [[ -n $series || -n $automatic ]]; then
 fi
 if ((${#release_args[@]})); then
     case ${1:-}:${2:-} in
-        kernel:query|kernel:fetch|boot:*|build:*) set -- "$@" "${release_args[@]}" ;;
-        *) echo 'Kernel options apply to kernel query, kernel fetch, boot or build.' >&2; exit 2 ;;
+        kernel:query|kernel:fetch|boot:*|build:*|native:*) set -- "$@" "${release_args[@]}" ;;
+        *) echo 'Kernel options apply to kernel query, kernel fetch, boot, build or native.' >&2; exit 2 ;;
     esac
 fi
 case "${1:-}" in
@@ -61,12 +62,16 @@ case "${1:-}" in
         shift
         exec bash "$scripts/apply-files.sh" "$@"
         ;;
+    native)
+        shift
+        exec bash "$scripts/build-native.sh" "$@"
+        ;;
     build)
         shift
         exec bash "$scripts/build-image.sh" "$@"
         ;;
     -h|--help|'')
-        printf 'Usage: renas -b xiaomi-umi [-k VERSION] [-a true|false] [-r OWNER/REPO] {inspect|download|extract|kernel|overlay|boot|build} --help\n'
+        printf 'Usage: renas -b xiaomi-umi [-k VERSION] [-a true|false] [-r OWNER/REPO] {inspect|download|extract|kernel|overlay|boot|build|native} --help\n'
         ;;
     *)
         printf 'Unknown Xiaomi Umi image command: %s\n' "$1" >&2

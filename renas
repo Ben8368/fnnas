@@ -47,11 +47,36 @@
 #
 #================================ Set make environment variables ================================
 #
-# The Umi backend handles Android boot and layout independently of disk-image builds.
-if [[ ${1:-} == -b || ${1:-} == --board ]] && [[ ${2:-} == xiaomi-umi ]]; then
+# Route an explicit single Umi board before legacy global initialization. Parse only
+# the option prefix; preserve the upstream argv, getopt and behavior otherwise.
+umi_args=()
+umi_board_count=0
+umi_board=
+umi_index=1
+while (( umi_index <= $# )); do
+    umi_next=$((umi_index + 1))
+    case ${!umi_index} in
+        -b|--board|--Board)
+            (( umi_next <= $# )) || break
+            umi_board=${!umi_next}
+            ((umi_board_count += 1))
+            ;;
+        -r|--kernelRepository|-k|--Kernel|-a|--Autokernel|-s|--Size|-e|--RootfsExpand|-n|--BuilderName)
+            (( umi_next <= $# )) || break
+            umi_args+=("${!umi_index}" "${!umi_next}")
+            ;;
+        --)
+            ((umi_index += 1))
+            break
+            ;;
+        *) break ;;
+    esac
+    ((umi_index += 2))
+done
+if [[ $umi_board == xiaomi-umi ]]; then
+    (( umi_board_count == 1 )) || { echo 'Select xiaomi-umi once, with no other board.' >&2; exit 2; }
     repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-    shift 2
-    exec bash "$repo/make-fnnas/qualcomm/sm8250/scripts/renas.sh" "$@"
+    exec bash "$repo/make-fnnas/qualcomm/sm8250/scripts/renas.sh" "${umi_args[@]}" "${@:umi_index}"
 fi
 
 # Related file storage paths

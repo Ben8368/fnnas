@@ -17,6 +17,12 @@ trap 'rm -rf -- "$scratch"' EXIT
 unpack_bootimg --boot_img "$boot" --out "$scratch/boot" > "$scratch/header"
 grep -Eq 'boot image header version: *2$' "$scratch/header"
 grep -Eq "[[:space:]]root=UUID=$uuid([[:space:]]|$)" "$scratch/header"
+if [[ ${UMI_NATIVE_BTRFS:-0} == 1 ]]; then
+    grep -Eq '[[:space:]]rootfstype=btrfs([[:space:]]|$)' "$scratch/header"
+    grep -Eq '[[:space:]]rootflags=subvolid=5([[:space:]]|$)' "$scratch/header"
+    (cd "$scratch"; gzip -dc boot/ramdisk | cpio --quiet -i --to-stdout etc/fstab ./etc/fstab) > "$scratch/fstab"
+    grep -Fxq "UUID=$uuid / btrfs defaults,noatime,subvolid=5 0 1" "$scratch/fstab"
+fi
 gzip -dc "$scratch/boot/kernel" | cmp - "$kernel/arch/arm64/boot/Image"
 cmp "$scratch/boot/dtb" "$kernel/boot-csot.dtb"
 lsinitramfs "$scratch/boot/ramdisk" > "$scratch/ramdisk-list"

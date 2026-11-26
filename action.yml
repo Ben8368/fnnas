@@ -1,6 +1,6 @@
 name: "Make Fnnas"
 author: "https://github.com/ophub/fnnas"
-description: "Support Amlogic, Rockchip and Allwinner boxes."
+description: "Support Amlogic, Rockchip, Allwinner, and Qualcomm Xiaomi Umi."
 inputs:
   # Select build target
   build_target:
@@ -40,6 +40,20 @@ inputs:
     description: "Set fnnas builder signature."
     required: false
     default: ""
+  # Qualcomm Umi only: a matched ABL v2 boot and Btrfs RootFS, never a flash step.
+  umi_boot_donor:
+    description: "Local SHA-locked Umi Android v2 boot donor."
+    required: false
+  umi_firmware_tar:
+    description: "Local Umi firmware-only archive (qcom/ and/or ath11k/)."
+    required: false
+  umi_firmware_sha256:
+    description: "Expected SHA-256 of the Umi firmware archive."
+    required: false
+  umi_refresh:
+    description: "Select an accepted Umi kernel profile: 60 or 90 Hz."
+    default: "60"
+    required: false
   # For compile kernel -----
   debs_repo:
     description: "Set fnnas debs repository."
@@ -61,7 +75,43 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - shell: bash
+    - if: inputs.fnnas_board == 'xiaomi-umi'
+      shell: bash
+      env:
+        ACTION_DIR: ${{ github.action_path }}
+        TARGET: ${{ inputs.build_target }}
+        BASE: ${{ inputs.fnnas_path }}
+        REPO: ${{ inputs.kernel_repo }}
+        SERIES: ${{ inputs.fnnas_kernel }}
+        AUTO: ${{ inputs.auto_kernel }}
+        SIZE: ${{ inputs.fnnas_size }}
+        EXPAND: ${{ inputs.rootfs_expand }}
+        BUILDER: ${{ inputs.builder_name }}
+        DONOR: ${{ inputs.umi_boot_donor }}
+        FIRMWARE: ${{ inputs.umi_firmware_tar }}
+        FIRMWARE_SHA256: ${{ inputs.umi_firmware_sha256 }}
+        RATE: ${{ inputs.umi_refresh }}
+      run: |
+        [[ $RUNNER_OS == Linux && $TARGET == fnnas && -n $DONOR && -n $FIRMWARE ]] || {
+          echo 'Umi requires Linux, build_target=fnnas, umi_boot_donor and umi_firmware_tar.' >&2
+          exit 2
+        }
+        [[ -z $SIZE && -z $EXPAND && -z $BUILDER ]] || {
+          echo 'Size/expansion/builder overrides are not supported by the Umi backend.' >&2
+          exit 2
+        }
+        [[ $REPO != ophub/fnnas ]] || REPO=Ben8368/fnnas
+        [[ $SERIES != 6.1.y_6.12.y ]] || SERIES=6.18.y
+        output="$RUNNER_TEMP/umi-fnnas-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        sudo bash "$ACTION_DIR/renas" -r "$REPO" -k "$SERIES" -a "$AUTO" -b xiaomi-umi \
+          native "${BASE:--}" "$DONOR" "$FIRMWARE" "$FIRMWARE_SHA256" "$output" --refresh "$RATE"
+        {
+          echo "PACKAGED_OUTPUTPATH=$output"
+          echo "PACKAGED_OUTPUTDATE=$(date +'%m.%d.%H%M')"
+          echo 'PACKAGED_STATUS=success'
+        } >> "$GITHUB_ENV"
+    - if: inputs.fnnas_board != 'xiaomi-umi'
+      shell: bash
       run: |
         cd ${{ github.action_path }}
         echo -e "FnNAS Actions working directory: [ ${PWD} ]"

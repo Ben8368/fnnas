@@ -15,6 +15,11 @@ if bash renas -b xiaomi-umi -k 6.18.y -a false kernel query --help; then
     exit 1
 fi
 bash renas -b xiaomi-umi build --help
+bash renas -r Ben8368/fnnas -k 6.18.y --Autokernel true -b xiaomi-umi -- native --help
+if bash renas -s 6000 -b xiaomi-umi native --help; then
+    echo 'An unsupported upstream option reached the Umi backend.' >&2
+    exit 1
+fi
 python3 -B -m unittest discover -v -s make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tests
 python3 -B -m unittest discover -v -s make-fnnas/qualcomm/sm8250/scripts/tests -p test_kernel_release.py
 bash make-fnnas/qualcomm/sm8250/scripts/tests/test_kernel_patches.sh

@@ -24,9 +24,11 @@ if (($# == 7)); then
 fi
 gzip -n -9 -c -- "$kdir/arch/arm64/boot/Image" > "$out/Image.gz"
 boot="$out/boot-umi-csot-${rate}hz-$version.img"
+fs_args=()
+if [[ ${UMI_NATIVE_BTRFS:-0} == 1 ]]; then fs_args+=(--native-btrfs); fi
 # pack-abl-v2 checks exact v2 layout, root UUID and load-address overlap.
 python3 "$repo/make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/pack-abl-v2.py" "$main_boot" "$out/Image.gz" "$ramdisk" "$dtb" "$boot" "$uuid" \
-    --native-cmdline "$kdir/native-display-cmdline"
+    --native-cmdline "$kdir/native-display-cmdline" "${fs_args[@]}"
 unpack_bootimg --boot_img "$boot" --out "$out/verify" > "$out/verify.txt"
 cmp "$out/Image.gz" "$out/verify/kernel"
 cmp "$ramdisk" "$out/verify/ramdisk"

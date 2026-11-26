@@ -69,7 +69,11 @@ rule=etc/udev/rules.d/80-umi-csot-backlight.rules
 install -Dm644 "$repo/make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/$rule" "$staging/$rule"
 # Retain the rest of the early userspace, with its root UUID updated below.
 if [[ -n ${UMI_ROOT_UUID:-} ]]; then
-    sed -i "s/02232280-925f-4edc-984f-24e466d3b6f1/$UMI_ROOT_UUID/g" "$staging/etc/fstab"
+    if [[ ${UMI_NATIVE_BTRFS:-0} == 1 ]]; then
+        printf 'UUID=%s / btrfs defaults,noatime,subvolid=5 0 1\n' "$UMI_ROOT_UUID" > "$staging/etc/fstab"
+    else
+        sed -i "s/02232280-925f-4edc-984f-24e466d3b6f1/$UMI_ROOT_UUID/g" "$staging/etc/fstab"
+    fi
 fi
 (cd "$staging"; find . -print0 | LC_ALL=C sort -z | cpio --quiet --null -o -H newc --owner=0:0) | gzip -n -9 > "$output"
 lsinitramfs "$output" > "$output.list"
