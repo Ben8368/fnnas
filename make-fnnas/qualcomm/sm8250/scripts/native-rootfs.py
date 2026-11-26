@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import tarfile
 import tempfile
@@ -16,6 +17,10 @@ from base_image import digest, mounted, open_disk, inventory
 REQUIRED_FIRMWARE = {"qcom/sm8250/a650_zap.mbn", "qcom/a650_gmu.bin", "qcom/a650_sqe.fw"}
 FSTAB = "UUID={uuid} / btrfs defaults,noatime,compress=zstd:1,subvolid=5 0 1\ntmpfs /tmp tmpfs defaults,nosuid 0 0\n"
 UPDATE_MASKS = ("apt-daily.timer", "apt-daily-upgrade.timer", "apt-daily-upgrade.service", "resize-rootfs.service")
+DONOR_HOOKS = ("etc/kernel/postinst.d/10-sync-dtb", "etc/kernel/postinst.d/15-update-ukernel-ver",
+               "etc/kernel/postinst.d/zz-update-grub", "etc/initramfs/post-update.d/99-uboot",
+               "etc/initramfs/post-update.d/zz-update-uinitrd")
+STAGING_MODES = {"/": 0o755, "/etc": 0o755, "/usr": 0o755, "/root": 0o700}
 
 
 def inside(root, name):
@@ -89,12 +94,30 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
         ["/dev/mmcblk0p2", "/", "btrfs"], ["/dev/mmcblk0p1", "/boot", "ext4"], ["tmpfs", "/tmp", "tmpfs"]
     ] or any(len(entry) != 6 or "subvol" in entry[3] for entry in mounts):
         raise ValueError("Donor fstab changed; review the layout rather than guessing")
+    mode_changes = {}
+    for relative, mode in STAGING_MODES.items():
+        path = inside(root, relative.lstrip("/"))
+        if path.is_dir() and not path.is_symlink():
+            original_mode = stat.S_IMODE(path.stat().st_mode)
+            if original_mode != mode:
+                path.chmod(mode)
+                mode_changes[relative] = [oct(original_mode), oct(mode)]
     replace_file(fstab, FSTAB.format(uuid=uuid))
     modules = inside(root, "lib/modules")
     for child in modules.iterdir():
         remove_path(child)
     for child in inside(root, "boot").iterdir():
         remove_path(child)
+    for top in ("vmlinuz", "vmlinuz.old", "initrd.img", "initrd.img.old"):
+        remove_path(root / top)
+    disabled_hooks = []
+    for name in DONOR_HOOKS:
+        hook = inside(root, name)
+        if hook.is_file() and not hook.is_symlink():
+            hook.chmod(stat.S_IMODE(hook.stat().st_mode) & ~0o111)
+            disabled_hooks.append(name)
+        elif hook.exists() or hook.is_symlink():
+            raise ValueError(f"Unexpected kernel hook type: {name}")
     for child in inside(root, "usr/src").glob("linux-headers-*"):
         remove_path(child)
     config = inside(root, "etc/initramfs-tools/update-initramfs.conf")
@@ -119,7 +142,8 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
     replace_file(preferences / "99-umi-no-donor-kernel", f"Package: {' '.join(held)}\nPin: version *\nPin-Priority: -1\n")
     install_firmware(root, firmware, firmware_sha256)
     policy = {"removed_donor_module_versions": info["rootfs"]["kernel_module_versions"],
-              "original_fstab": original, "masked_units": UPDATE_MASKS, "apt_pinned_packages": held,
+              "original_fstab": original, "corrected_modes": mode_changes,
+              "masked_units": UPDATE_MASKS, "disabled_donor_hooks": disabled_hooks, "apt_pinned_packages": held,
               "ota": "vendor OTA unverified; do not run upgrades on Umi"}
     replace_file(inside(root, "etc/umi-build") / "rootfs-policy.json", json.dumps(policy, indent=2) + "\n")
 
@@ -141,6 +165,12 @@ def verify(image, kernel, uuid):
                 if (modules != [release] or guest.ls("/lib/modules") != [release] or guest.ls("/boot")
                         or info["fstab"] != FSTAB.format(uuid=uuid)):
                     raise ValueError("Wrong RootFS modules, fstab or stale boot files")
+                for path, mode in STAGING_MODES.items():
+                    if (guest.statns(path)["st_mode"] & 0o7777) != mode:
+                        raise ValueError(f"RootFS directory mode mismatch: {path}")
+                for name in DONOR_HOOKS:
+                    if guest.is_file(f"/{name}") and (guest.statns(f"/{name}")["st_mode"] & 0o111):
+                        raise ValueError(f"Incompatible donor boot hook is still executable: {name}")
                 for unit in UPDATE_MASKS:
                     if guest.readlink(f"/etc/systemd/system/{unit}") != "/dev/null":
                         raise ValueError(f"Update mask lost: {unit}")

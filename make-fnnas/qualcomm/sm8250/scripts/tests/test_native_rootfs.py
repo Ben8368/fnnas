@@ -21,8 +21,11 @@ class NativeRootfsTests(unittest.TestCase):
             work = Path(directory)
             root = work / "staging"
             for name in ("etc/systemd/system", "etc/initramfs-tools", "etc/apt", "usr/lib/modules/old",
-                         "usr/trim", "usr/src/linux-headers-old", "boot/extlinux"):
+                         "usr/trim", "usr/src/linux-headers-old", "boot/extlinux", "root", "etc/kernel/postinst.d"):
                 (root / name).mkdir(parents=True)
+            hook = root / "etc/kernel/postinst.d/10-sync-dtb"
+            hook.touch(mode=0o755)
+            (root / "root").chmod(0o777)
             (root / "lib").symlink_to("usr/lib", target_is_directory=True)
             (root / "etc/fstab").write_text("/dev/mmcblk0p2 / btrfs defaults 0 1\n"
                                           "/dev/mmcblk0p1 /boot ext4 defaults 0 2\n"
@@ -43,6 +46,8 @@ class NativeRootfsTests(unittest.TestCase):
             native.prepare(root, work, firmware, native.digest(firmware, "sha256"), uuid)
             self.assertEqual((root / "etc/fstab").read_text(), native.FSTAB.format(uuid=uuid))
             self.assertTrue((root / "usr/trim").is_dir())
+            self.assertEqual(hook.stat().st_mode & 0o111, 0)
+            self.assertEqual((root / "root").stat().st_mode & 0o777, 0o700)
             self.assertFalse(list((root / "usr/lib/modules").iterdir()))
             self.assertFalse(list((root / "boot").iterdir()))
             self.assertEqual((root / "etc/systemd/system/resize-rootfs.service").readlink(), Path("/dev/null"))
