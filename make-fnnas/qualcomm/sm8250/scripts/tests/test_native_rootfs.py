@@ -20,9 +20,18 @@ class NativeRootfsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             work = Path(directory)
             root = work / "staging"
-            for name in ("etc/systemd/system", "etc/initramfs-tools", "etc/apt", "usr/lib/modules/old",
+            for name in ("etc/systemd/system", "etc/initramfs-tools", "etc/apt", "usr/lib/systemd/system",
+                         "usr/lib/modules/old",
                          "usr/trim", "usr/src/linux-headers-old", "boot/extlinux", "root", "etc/kernel/postinst.d"):
                 (root / name).mkdir(parents=True)
+            overlay = scripts.parents[2] / "fnnas-files/different-files/xiaomi-umi/rootfs"
+            for name in native.CONSOLE_FILES:
+                target = root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((overlay / name).read_bytes())
+            pstore_link = root / native.PSTORE_LINK
+            pstore_link.parent.mkdir()
+            pstore_link.symlink_to("/lib/systemd/system/systemd-pstore.service")
             hook = root / "etc/kernel/postinst.d/10-sync-dtb"
             hook.touch(mode=0o755)
             (root / "root").chmod(0o777)
@@ -51,6 +60,12 @@ class NativeRootfsTests(unittest.TestCase):
             self.assertFalse(list((root / "usr/lib/modules").iterdir()))
             self.assertFalse(list((root / "boot").iterdir()))
             self.assertEqual((root / "etc/systemd/system/resize-rootfs.service").readlink(), Path("/dev/null"))
+            self.assertEqual((root / "etc/systemd/system/multi-user.target.wants/umi-usb-acm.service").readlink(),
+                             Path("/usr/lib/systemd/system/umi-usb-acm.service"))
+            self.assertEqual((root / "usr/local/sbin/umi-serial-console").stat().st_mode & 0o777, 0o755)
+            self.assertEqual((root / "usr/local/sbin/umi-power").stat().st_mode & 0o777, 0o755)
+            self.assertIn("Storage=persistent", (root / "etc/systemd/journald.conf.d/90-umi-boot-log.conf").read_text())
+            self.assertEqual(pstore_link.readlink(), Path("/lib/systemd/system/systemd-pstore.service"))
             self.assertEqual((root / "etc/initramfs-tools/update-initramfs.conf").read_text(), "update_initramfs=no\n")
             self.assertTrue((root / "usr/lib/firmware/qcom/sm8250/a650_zap.mbn").is_file())
 

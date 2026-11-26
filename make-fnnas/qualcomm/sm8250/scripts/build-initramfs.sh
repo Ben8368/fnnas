@@ -71,6 +71,11 @@ install -Dm644 "$repo/make-fnnas/fnnas-files/different-files/xiaomi-umi/rootfs/$
 if [[ -n ${UMI_ROOT_UUID:-} ]]; then
     if [[ ${UMI_NATIVE_BTRFS:-0} == 1 ]]; then
         printf 'UUID=%s / btrfs defaults,noatime,subvolid=5 0 1\n' "$UMI_ROOT_UUID" > "$staging/etc/fstab"
+        # The pinned init reads conf.d before it redirects early userspace output.
+        # Feed that output to the same kernel ring read by journald and ramoops.
+        grep -Fxq 'if [ -n "$log_output" ]; then' "$staging/init"
+        mkdir -p "$staging/conf/conf.d"
+        printf 'log_output=/dev/kmsg\n' > "$staging/conf/conf.d/umi-boot-log"
     else
         sed -i "s/02232280-925f-4edc-984f-24e466d3b6f1/$UMI_ROOT_UUID/g" "$staging/etc/fstab"
     fi
@@ -80,6 +85,9 @@ lsinitramfs "$output" > "$output.list"
 grep -q "^usr/lib/modules/$krel/" "$output.list"
 grep -Fxq "$rule" "$output.list"
 grep -Fxq "$zap" "$output.list"
+if [[ -n ${UMI_ROOT_UUID:-} && ${UMI_NATIVE_BTRFS:-0} == 1 ]]; then
+    grep -Fxq 'conf/conf.d/umi-boot-log' "$output.list"
+fi
 if grep -Fq "usr/lib/modules/$krel/kernel/fs/btrfs/btrfs.ko" "$output.list"; then
     echo 'Btrfs must be built into the kernel and must not be packaged as a module.' >&2
     exit 1

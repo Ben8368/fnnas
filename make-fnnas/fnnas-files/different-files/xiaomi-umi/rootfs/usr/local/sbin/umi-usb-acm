@@ -1,0 +1,42 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+set -euo pipefail
+
+g=/sys/kernel/config/usb_gadget/umi-acm
+c=$g/configs/c.1
+f=$g/functions/acm.usb0
+strings=$g/strings/0x409
+
+if ! mountpoint -q /sys/kernel/config; then
+	mount -t configfs configfs /sys/kernel/config
+fi
+[[ -d /sys/kernel/config/usb_gadget ]] || { echo 'USB configfs gadget support is unavailable' >&2; exit 1; }
+
+for ((attempt = 0; attempt < 60; attempt++)); do
+	shopt -s nullglob
+	udcs=(/sys/class/udc/*)
+	if ((${#udcs[@]})); then break; fi
+	sleep 1
+done
+((${#udcs[@]})) || { echo 'No USB device controller became available' >&2; exit 1; }
+
+if [[ -e $g ]]; then
+	if [[ -n $(< "$g/UDC") ]]; then printf '\n' > "$g/UDC"; fi
+	rm -f -- "$c/acm.usb0"
+	for node in "$f" "$c" "$strings"; do
+		if [[ -d $node ]]; then rmdir -- "$node"; fi
+	done
+	rmdir -- "$g"
+fi
+
+mkdir -p "$strings" "$c" "$f"
+printf '0x1d6b\n' > "$g/idVendor"
+printf '0x0104\n' > "$g/idProduct"
+printf '0xef\n' > "$g/bDeviceClass"
+printf '0x02\n' > "$g/bDeviceSubClass"
+printf '0x01\n' > "$g/bDeviceProtocol"
+printf 'FnOS Umi USB Serial\n' > "$strings/product"
+printf 'Xiaomi Umi\n' > "$strings/manufacturer"
+printf 'umi-acm\n' > "$strings/serialnumber"
+ln -s "$f" "$c/acm.usb0"
+printf '%s\n' "${udcs[0]##*/}" > "$g/UDC"

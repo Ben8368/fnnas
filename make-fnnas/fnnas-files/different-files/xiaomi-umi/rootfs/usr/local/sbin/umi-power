@@ -1,0 +1,44 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+set -euo pipefail
+
+if (( $# != 1 )); then
+	echo 'Usage: umi-power reboot|poweroff|fastboot' >&2
+	exit 2
+fi
+if (( EUID != 0 )); then
+	echo 'Root privileges are required.' >&2
+	exit 1
+fi
+
+action=$1
+reject() {
+	logger -s -t umi-power -- "$action rejected. $1"
+	journalctl --sync
+	exit 1
+}
+
+case $action in
+	reboot) command=(systemctl --reboot-argument= reboot) ;;
+	poweroff) command=(systemctl poweroff) ;;
+	fastboot)
+		pon=/sys/firmware/devicetree/base/soc@0/spmi@c440000/pmic@0/pon@800
+		if [[ ! -r $pon/mode-bootloader || $(od -An -v -tx1 "$pon/mode-bootloader") != ' 00 00 00 02' ]]; then
+			reject 'Fastboot reboot mode is missing from the live Umi device tree.'
+		fi
+		bound=false
+		for node in /sys/bus/platform/drivers/qcom-pon/*/of_node; do
+			if [[ $node -ef $pon ]]; then bound=true; break; fi
+		done
+		if ! $bound; then
+			reject 'The Qualcomm PON driver is not bound to the Umi reboot-mode node.'
+		fi
+		command=(systemctl --reboot-argument=bootloader reboot)
+		;;
+	*) echo 'Usage: umi-power reboot|poweroff|fastboot' >&2; exit 2 ;;
+esac
+
+logger -s -t umi-power -- "Requested $action from $(tty || true)"
+journalctl --sync
+"${command[@]}" || reject 'systemd refused the request.'
+printf 'systemd accepted %s.\n' "$action"

@@ -17,6 +17,19 @@ from base_image import digest, mounted, open_disk, inventory
 REQUIRED_FIRMWARE = {"qcom/sm8250/a650_zap.mbn", "qcom/a650_gmu.bin", "qcom/a650_sqe.fw"}
 FSTAB = "UUID={uuid} / btrfs defaults,noatime,compress=zstd:1,subvolid=5 0 1\ntmpfs /tmp tmpfs defaults,nosuid 0 0\n"
 UPDATE_MASKS = ("apt-daily.timer", "apt-daily-upgrade.timer", "apt-daily-upgrade.service", "resize-rootfs.service")
+USB_ACM_UNIT = "umi-usb-acm.service"
+CONSOLE_FILES = {
+    f"usr/lib/systemd/system/{USB_ACM_UNIT}": 0o644,
+    "usr/local/sbin/umi-usb-acm": 0o755,
+    "usr/local/sbin/umi-serial-console": 0o755,
+    "usr/local/sbin/umi-power": 0o755,
+    "etc/udev/rules.d/99-umi-serial.rules": 0o644,
+    "etc/systemd/system/serial-getty@ttyGS0.service.d/50-umi-console.conf": 0o644,
+    "etc/systemd/journald.conf.d/90-umi-boot-log.conf": 0o644,
+    "etc/systemd/pstore.conf.d/90-umi-boot-log.conf": 0o644,
+}
+PSTORE_LINK = Path("etc/systemd/system/sysinit.target.wants/systemd-pstore.service")
+PSTORE_UNIT = "/lib/systemd/system/systemd-pstore.service"
 DONOR_HOOKS = ("etc/kernel/postinst.d/10-sync-dtb", "etc/kernel/postinst.d/15-update-ukernel-ver",
                "etc/kernel/postinst.d/zz-update-grub", "etc/initramfs/post-update.d/99-uboot",
                "etc/initramfs/post-update.d/zz-update-uinitrd")
@@ -132,6 +145,20 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
         if path.exists() or path.is_symlink():
             path.unlink()
         path.symlink_to("/dev/null")
+    for name, mode in CONSOLE_FILES.items():
+        path = inside(root, name)
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f"Umi console file is missing from the board overlay: {name}")
+        path.chmod(mode)
+    pstore_link = inside(root, PSTORE_LINK.parent) / PSTORE_LINK.name
+    if not pstore_link.is_symlink() or pstore_link.readlink() != Path(PSTORE_UNIT):
+        raise ValueError("The pinned donor must enable systemd-pstore")
+    wants = inside(root, "etc/systemd/system/multi-user.target.wants")
+    wants.mkdir(exist_ok=True)
+    acm_link = wants / USB_ACM_UNIT
+    if acm_link.exists() or acm_link.is_symlink():
+        raise ValueError("Unexpected pre-existing Umi USB ACM enablement")
+    acm_link.symlink_to(f"/usr/lib/systemd/system/{USB_ACM_UNIT}")
     # Pin out donor kernel packages without rewriting dpkg's installed metadata.
     held = sorted({line.split("\t", 1)[0] for line in (report / "packages.txt").read_text().splitlines()
                    if line.startswith(("linux-image-", "linux-headers-", "linux-modules-"))})
@@ -174,6 +201,14 @@ def verify(image, kernel, uuid):
                 for unit in UPDATE_MASKS:
                     if guest.readlink(f"/etc/systemd/system/{unit}") != "/dev/null":
                         raise ValueError(f"Update mask lost: {unit}")
+                if (guest.readlink(f"/etc/systemd/system/multi-user.target.wants/{USB_ACM_UNIT}")
+                        != f"/usr/lib/systemd/system/{USB_ACM_UNIT}"
+                        or guest.readlink(f"/{PSTORE_LINK}") != PSTORE_UNIT
+                        or not guest.is_file(PSTORE_UNIT)):
+                    raise ValueError("Umi USB ACM or systemd-pstore service is not enabled")
+                for name, mode in CONSOLE_FILES.items():
+                    if not guest.is_file(f"/{name}") or (guest.statns(f"/{name}")["st_mode"] & 0o7777) != mode:
+                        raise ValueError(f"Umi console file missing or wrong mode: {name}")
                 firmware = json.loads(guest.cat("/etc/umi-build/firmware.json"))
                 if not REQUIRED_FIRMWARE <= firmware["files"].keys() or any(
                     guest.checksum("sha256", f"/usr/lib/firmware/{name}") != sha

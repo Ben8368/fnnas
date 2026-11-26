@@ -95,7 +95,7 @@ def main():
     native_cmdline = args.native_cmdline.read_bytes().rstrip(b"\n") if args.native_cmdline else None
     result = repack(header, args.kernel.read_bytes(), args.ramdisk.read_bytes(),
                     args.dtb.read_bytes(), args.root_uuid, native_cmdline=native_cmdline,
-                    append_cmdline=b"rootfstype=btrfs rootflags=subvolid=5" if args.native_btrfs else b"")
+                    append_cmdline=b"rootfstype=btrfs rootflags=subvolid=5 printk.devkmsg=on" if args.native_btrfs else b"")
     args.output.write_bytes(result)
 
 
