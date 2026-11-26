@@ -35,7 +35,7 @@ make-fnnas/qualcomm/sm8250/boot/abl-android-v2/
 └── tools/                         # 重打包、替换 DTB 和生成 ABL 锚点
 ```
 
-**DTS 源码在上一级**：`../dtb/slim-ovf-wifi6-gpu-oc-final.dts`（与其编译产物 `.dtb`）。
+**DTS 源码由 Qualcomm 模块保存**：`../../../make-fnnas/qualcomm/sm8250/kernel/dts-donor.dts`（与其编译产物 `.dtb`）。
 
 **最小依赖**：
 
@@ -71,7 +71,7 @@ bash tools/legacy/boot-build/build-boot.sh <基底boot.img> <输出boot.img>
 ## 三、可复现性：已实测（2026-09-27）
 
 ```
-$ dtc -@ -I dts -O dtb -o rebuilt.dtb ../dtb/slim-ovf-wifi6-gpu-oc-final.dts
+$ dtc -@ -I dts -O dtb -o rebuilt.dtb ../../../make-fnnas/qualcomm/sm8250/kernel/dts-donor.dts
 $ python3 ../../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/replace-dtb.py ../boot/boot-umi-csot-ovf-wifi6-gpu-oc-final.img \
                                rebuilt.dtb out/boot-rebuilt.img
 
@@ -89,7 +89,7 @@ $ python3 ../../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/replace-
 ```bash
 cd boot-build
 patch -p0 -o /tmp/current.dts ../../../make-fnnas/qualcomm/sm8250/boot/abl-android-v2/baseline/armbian-baseline-umi-csot.dts < dts.patch
-diff -q /tmp/current.dts ../dtb/slim-ovf-wifi6-gpu-oc-final.dts    # 应当无输出
+diff -q /tmp/current.dts ../../../make-fnnas/qualcomm/sm8250/kernel/dts-donor.dts    # 应当无输出
 ```
 
 ---
