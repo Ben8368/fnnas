@@ -24,7 +24,8 @@ class KernelReleaseTests(unittest.TestCase):
     def test_only_accepted_releases_are_selected_numerically(self):
         def release(version, rate="60"):
             source = "a" * 40
-            data = {"schema": 1, "repository": "owner/repo", "branch": kernel_release.PUBLISH_BRANCH,
+            data = {"schema": 1, "repository": "owner/repo", "build_repository": kernel_release.PUBLISH_REPO,
+                    "branch": kernel_release.PUBLISH_BRANCH,
                     "version": version, "profile": f"csot-{rate}", "source_commit": source,
                     "linux_commit": "b" * 40, "patches_sha256": "c" * 64,
                     "run_id": 42, "run_attempt": 1, "package_sha256": "d" * 64}

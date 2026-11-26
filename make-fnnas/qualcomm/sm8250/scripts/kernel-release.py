@@ -113,7 +113,8 @@ def describe_release(repo, release, rate, requested):
         return None
     data = json.loads(release["body"])
     version, source = data["version"], data["source_commit"]
-    if (data["schema"] != 1 or data["repository"] != repo or data["branch"] != PUBLISH_BRANCH
+    if (data["schema"] != 1 or data["repository"].casefold() != repo.casefold()
+            or data["build_repository"] != PUBLISH_REPO or data["branch"] != PUBLISH_BRANCH
             or not re.fullmatch(VERSION, version) or (requested != "auto" and version != requested)
             or not re.fullmatch(SHA, source) or not re.fullmatch(SHA, data["linux_commit"])
             or not re.fullmatch(HASH, data["patches_sha256"]) or PROFILE_RATE.get(data["profile"]) != rate
@@ -221,6 +222,13 @@ def promote(args):
     if min(args.run_id, args.run_attempt) < 1:
         raise ValueError("Require positive run ID and attempt")
     repo = PUBLISH_REPO
+    destination = args.release_repo or repo
+    if not re.fullmatch(r"Ben8368/[A-Za-z0-9_.-]+", destination, re.IGNORECASE):
+        raise ValueError("The release target must be a maintainer-owned GitHub repository")
+    destination_data = json.loads(gh("api", f"repos/{destination}"))
+    if destination_data["private"] or destination_data["owner"]["login"].casefold() != PUBLISH_OPERATOR.casefold():
+        raise ValueError("The release catalog must be public and maintainer-owned")
+    destination = destination_data["full_name"]
     run = json.loads(gh("api", f"repos/{repo}/actions/runs/{args.run_id}/attempts/{args.run_attempt}"))
     if (run["head_repository"]["full_name"] != repo or run["head_branch"] != PUBLISH_BRANCH
             or run["head_sha"] != args.source or run["conclusion"] != "success"
@@ -253,7 +261,7 @@ def promote(args):
                 or (root / "project.sha").read_text().strip() != args.source
                 or (root / "armbian-patches.tsv").read_bytes() != patches):
             raise ValueError("Artifact provenance does not match the run")
-        data = {**identity, "schema": 1, "repository": repo, "branch": PUBLISH_BRANCH,
+        data = {**identity, "schema": 1, "repository": destination, "build_repository": repo, "branch": PUBLISH_BRANCH,
                 "run_id": args.run_id, "run_attempt": args.run_attempt, "package_sha256": sha256(bundle)}
         record = json.loads(args.acceptance.read_text(encoding="utf-8"))
         acceptance_record(record, data)
@@ -280,20 +288,29 @@ def promote(args):
         notes = root / "notes.json"
         notes.write_text(json.dumps(data, indent=2) + "\n")
         # Explicitly create a lightweight ref to the tested SHA. Existing refs are never reused.
-        gh("api", "--method", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/tags/{tag}",
-           "-f", f"sha={args.source}")
-        gh("release", "create", tag, str(bundle), str(evidence), "--repo", repo, "--verify-tag",
+        if destination == repo:
+            gh("api", "--method", "POST", f"repos/{repo}/git/refs", "-f", f"ref=refs/tags/{tag}",
+               "-f", f"sha={args.source}")
+        else:
+            # Copy the commit object with the tag. Never create/update a destination branch.
+            checkout = root / "source"
+            subprocess.run(["git", "init", "-q", checkout], check=True)
+            subprocess.run(["git", "-C", checkout, "fetch", "--no-tags", "--depth=1",
+                            f"https://github.com/{repo}.git", args.source], check=True)
+            subprocess.run(["git", "-C", checkout, "push", f"https://github.com/{destination}.git",
+                            f"{args.source}:refs/tags/{tag}"], check=True)
+        gh("release", "create", tag, str(bundle), str(evidence), "--repo", destination, "--verify-tag",
            "--title", tag, "--notes-file", str(notes), "--draft", "--latest=false")
-        draft = json.loads(gh("release", "view", tag, "--repo", repo, "--json", "databaseId"))
+        draft = json.loads(gh("release", "view", tag, "--repo", destination, "--json", "databaseId"))
         release_id = draft["databaseId"]
-        uploaded = json.loads(gh("api", f"repos/{repo}/releases/{release_id}/assets"))
+        uploaded = json.loads(gh("api", f"repos/{destination}/releases/{release_id}/assets"))
         digests = {asset["name"]: asset.get("digest") for asset in uploaded if asset["state"] == "uploaded"}
         if digests != {path.name: f"sha256:{sha256(path)}" for path in (bundle, evidence)}:
             raise ValueError(f"Asset digest mismatch; {tag} remains a draft")
-        ref = json.loads(gh("api", f"repos/{repo}/git/ref/tags/{tag}"))["object"]
+        ref = json.loads(gh("api", f"repos/{destination}/git/ref/tags/{tag}"))["object"]
         if ref["type"] != "commit" or ref["sha"] != args.source:
             raise ValueError(f"Tag moved; {tag} remains a draft")
-        print(gh("release", "edit", tag, "--repo", repo, "--draft=false", "--latest=false"))
+        print(gh("release", "edit", tag, "--repo", destination, "--draft=false", "--latest=false"))
 
 
 def main():
@@ -319,6 +336,7 @@ def main():
     promotion.add_argument("--run-attempt", required=True, type=int)
     promotion.add_argument("--acceptance", required=True, type=Path)
     promotion.add_argument("--evidence", required=True, type=Path)
+    promotion.add_argument("--release-repo", help="separate public catalog owned by the maintainer")
     promotion.add_argument("--publish", action="store_true", help="create tag and release (default: verify only)")
     args = parser.parse_args()
     try:
