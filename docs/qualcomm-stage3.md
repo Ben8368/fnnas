@@ -36,6 +36,8 @@ sudo bash renas -b xiaomi-umi -k 6.18.60 -a false native \
 
 `native` 的底包位置可为 `-`（自动获取锁定包），输入需为可重读文件，工作目录用原生 Linux 文件系统。要求 `python3-guestfs`、可用的 appliance 内核、`btrfs-progs`、`rsync`、`mkbootimg`、`cpio`、`kmod`、`initramfs-tools-core`、`uuid-runtime`。固件 tar 仅放用户有权取得的 `qcom/`、`ath11k/` 下的常规文件，至少包含 `qcom/sm8250/a650_zap.mbn`、`qcom/a650_gmu.bin` 和 `qcom/a650_sqe.fw`；这些不是全量外设验收清单。固件 tar 整体摘要及每文件摘要都会保留。`action.yml` 的 `fnnas_board: xiaomi-umi` 使用同一入口，新增 `umi_boot_donor`、`umi_firmware_tar`、`umi_firmware_sha256`、`umi_refresh`。其他三个平台仍走原有 action 步骤。
 
+上游下载步骤主要检查下载成功及文件格式，未给该自动选择路径逐个锁定 SHA-256；本分支新增压缩字节的 SHA-256 和大小检查。
+
 不复制 donor `/boot` 分区，不套用上游的 U-Boot/分区扩容逻辑。该 donor 是 Btrfs 顶层 ID 5，无独立子卷；新镜像只有一个 Btrfs 文件系统，UUID 同步到 ABL 命令行、initramfs 及 RootFS fstab。只接受这个已审计的布局；将来有不同子卷或挂载点的底包需重新审核。清理旧模块、旧头文件和 boot 残余，禁用已知 Rockchip/U-Boot/GRUB 更新 hooks，阻断 Debian 例行自动升级和旧平台自动扩容，APT pin 禁止旧内核包升级，保留真实 dpkg 元数据；**这些不是禁用 fnOS 专有 OTA 的证明**。`trim_main` 等仍存在，原生 fnOS 首启、实际数据盘、OTA 的平台依赖须另验，不允许尝试生产升级。
 
 ## 拆分和许可边界

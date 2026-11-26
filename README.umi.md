@@ -23,9 +23,9 @@ UMI 适配来自 `Ben8368/fnos-xiaomi-umi`，硬件与引导基线来自 `misaka
 
 ## 原生 fnOS 适配架构
 
-`renas -b xiaomi-umi` 支持官方 ARM64 底包审计和 RootFS 提取。经审查的覆盖文件按 SM8250 平台、小米 10 机型的顺序应用。镜像组装从已准备的 RootFS 出发，使用已发布的 UMI 内核和同版模块生成 ABL v2 Boot 与 RootFS 配套镜像。[构建命令](docs/03-自行构建.md)
+`renas -b xiaomi-umi` 支持官方 ARM64 底包审计和 RootFS 提取。经审查的覆盖文件按 SM8250 平台、小米 10 机型的顺序应用。`native` 从校验过的官方底包组装，使用已通过物理验收并提升的 UMI 内核及同版模块生成 ABL v2 Boot 与 RootFS 配套镜像。[构建命令](docs/03-自行构建.md)
 
-当前 Debian 基线使用 ext4。原生 fnOS 的目标文件系统等底包审计和升级兼容性验证后确定。
+历史 Debian 基线使用 ext4；原生 fnOS 采用与已审计 donor 一致的 Btrfs 顶层根。此布局不表示 OTA 兼容。
 ```
 上电 → BootROM / XBL → 小米 ABL（需已解锁 BootLoader）
   │
@@ -46,7 +46,7 @@ UMI 适配来自 `Ben8368/fnos-xiaomi-umi`，硬件与引导基线来自 `misaka
 - **Debian 复现基线**采用 Linux `6.18.60`，支持 1080×2340 CSOT 60 Hz 和 90 Hz 两种独立构建。两档均有 RAM 启动记录。电池与充电区间控制、WiFi、USB NCM/ACM、GPU、Venus 和 Docker 的验证范围见下文。[真机显示记录](make-fnnas/qualcomm/sm8250/kernel/config/csot/README.md#fnos-ram-boot-on-2026-11-25)
 - **Linux `6.18.65` 候选**于 2026-11-26 在 CSOT 60 Hz 设备上进行 RAM 探针测试，确认进入 PID 1、USB ACM 出现及 1080×2340 @ 60 Hz 显示状态。记录属于 RAM 探针验收。[真机无刷写验收](docs/04-真机无刷写验收.md)
 - **🧪 可选实验内核（`lab-60` / `lab-90`）**：已适配有线固定 PD、BQ25970 PPS 充电路径及其 30 秒硬件 watchdog 驱动、SN100T NFC（Linux NFC/NCI）。实验 profile 不打包 rootfs，也不属于默认发布镜像；PD/PPS 保护、watchdog 超时恢复和 NFC 仍需在目标 fnOS 系统上分别验收。细节见[实验配置记录](make-fnnas/qualcomm/sm8250/kernel/config/csot/README.md)。
-- **fnOS 系统集成**已具备底包审计、RootFS 提取和样本组装入口。官方底包的 SHA-256 尚待补齐，Btrfs 子卷、首次启动、WebUI 和 OTA 仍待真实底包和真机验证。[底包审计与组装](make-fnnas/qualcomm/sm8250/README.md)
+- **fnOS 系统集成**已对公开 ARM64 `rockchip_1253` 底包计算并验证 SHA-256，确认 Btrfs 顶层 ID 5、无额外子卷。原生 fnOS 首次启动、WebUI 和 OTA 仍待真机验证。[底包审计与组装](make-fnnas/qualcomm/sm8250/README.md)
 
 ---
 
