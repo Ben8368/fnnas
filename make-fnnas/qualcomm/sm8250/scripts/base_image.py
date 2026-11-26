@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 PROJECT = Path(__file__).resolve().parents[1]
 SOURCE_LOCK = PROJECT / "sources/fnos-arm64.lock"
+RELEASE_LOCK = PROJECT / "sources/fnos-upstream.lock"
 DEFAULT_REPORT = PROJECT.parents[2] / "out/base-image-report"
 # The guest disk is opened read-only; keep Btrfs mounts read-only as well.
 MOUNT_OPTIONS = {"ext4": "ro,noload", "btrfs": "ro"}
@@ -35,11 +36,14 @@ def sha256_value(value):
 
 
 def download(args):
-    with args.lock.open("rb") as stream:
+    lock = args.lock or (SOURCE_LOCK if args.url else RELEASE_LOCK)
+    with lock.open("rb") as stream:
         source = tomllib.load(stream)["source"]
     if not source.get("sha256"):
         raise ValueError("the source lock needs a verified SHA-256 before downloading")
     expected = sha256_value(source["sha256"])
+    if args.url and source.get("release_asset"):
+        raise ValueError("the upstream release lock cannot be used with a URL override")
     if source.get("requires_signed_url") and not args.url:
         raise ValueError("pass the temporary link from the official download page using --url")
     url = args.url or source["image_url"]
@@ -63,6 +67,8 @@ def download(args):
             raise ValueError("downloaded archive SHA-256 differs from the source lock")
         if source.get("official_md5") and digest(archive, "md5") != source["official_md5"].lower():
             raise ValueError("downloaded archive MD5 differs from the official value in the lock")
+        if source.get("bytes") and archive.stat().st_size != source["bytes"]:
+            raise ValueError("downloaded archive size differs from the source lock")
         os.link(archive, output)
     print(output)
 
@@ -178,6 +184,21 @@ def inventory(guest):
         boot = [name for name in guest.ls("/boot") if name.startswith(("vmlinuz", "Image", "initrd"))]
     debian_path = "/etc/debian_version"
     debian = guest.cat(debian_path).strip() if guest.is_file(debian_path, followsymlinks=True) else None
+    fstab = guest.cat("/etc/fstab") if guest.is_file("/etc/fstab", followsymlinks=True) else None
+    trim = sorted(guest.ls("/usr/trim"))
+    ota = re.compile(r"update|upgrade|ota|trim", re.I)
+    dependencies = {}
+    enabled = []
+    for directory in SERVICE_DIRS:
+        if not guest.is_dir(directory, followsymlinks=True):
+            continue
+        for name in guest.ls(directory):
+            if name.endswith((".wants", ".requires")) and guest.is_dir(f"{directory}/{name}", followsymlinks=True):
+                enabled.extend(f"{name}/{unit}" for unit in guest.ls(f"{directory}/{name}") if ota.search(unit))
+            unit = f"{directory}/{name}"
+            if name.endswith((".service", ".timer")) and ota.search(name) and guest.is_file(unit, followsymlinks=True):
+                dependencies[unit] = [line for line in guest.cat(unit).splitlines() if line.startswith(
+                    ("Exec", "Requires", "Wants", "After", "Before", "Condition", "EnvironmentFile", "Unit="))]
     stats = guest.statvfs("/")
     rootfs = {
         "architecture": "arm64",
@@ -187,7 +208,12 @@ def inventory(guest):
         "filesystem_bytes": stats["blocks"] * stats["frsize"],
         "used_bytes": (stats["blocks"] - stats["bfree"]) * stats["frsize"],
         "usr_trim_present": True,
-        "usr_trim_entries": sorted(guest.ls("/usr/trim")),
+        "usr_trim_entries": trim,
+        "fstab": fstab,
+        "ota_matching_trim_entries": [name for name in trim if ota.search(name)],
+        "ota_related_units": dependencies,
+        "ota_related_enabled_links": sorted(set(enabled)),
+        "ota_related_packages": [package for package in packages if ota.search(package.split("\t", 1)[0])],
         "installed_package_count": len(packages),
         "service_count": len(services),
     }
@@ -196,8 +222,8 @@ def inventory(guest):
 
 def input_digest(image, expected):
     sha256 = digest(image, "sha256")
-    if expected == "locked":
-        with SOURCE_LOCK.open("rb") as stream:
+    if expected in {"locked", "vendor-locked"}:
+        with (RELEASE_LOCK if expected == "locked" else SOURCE_LOCK).open("rb") as stream:
             expected = tomllib.load(stream)["source"].get("sha256")
         if not expected:
             raise ValueError("the source lock needs a verified SHA-256")
@@ -284,7 +310,7 @@ def inspect(args):
                     for item in guest.btrfs_subvolume_list("/")
                 ]
         raw_size = raw.stat().st_size
-    board = json.loads((PROJECT / "boards/xiaomi-umi.yml").read_text(encoding="utf-8"))
+    board = json.loads((PROJECT.parents[1] / "boards/xiaomi-umi.yml").read_text(encoding="utf-8"))
     info = {
         "image": source.name,
         "sha256": sha256,
@@ -324,7 +350,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     download_parser = commands.add_parser("download", help="fetch a SHA-256-pinned archive")
     download_parser.add_argument("output", type=Path, help="new archive path")
-    download_parser.add_argument("--lock", default=SOURCE_LOCK, type=Path)
+    download_parser.add_argument("--lock", type=Path, help="override the pinned release/vendor source lock")
     download_parser.add_argument("--url", help="temporary HTTPS link from the official download page")
     download_parser.set_defaults(run=download)
     inspect_parser = commands.add_parser("inspect", help="audit a raw image or its gzip/xz archive")
@@ -336,7 +362,7 @@ def main():
     extract_parser.add_argument("archive", type=Path)
     extract_parser.set_defaults(run=extract)
     for command in (inspect_parser, extract_parser):
-        command.add_argument("--sha256", type=lambda value: value if value == "locked" else sha256_value(value),
+        command.add_argument("--sha256", type=lambda value: value if value in {"locked", "vendor-locked"} else sha256_value(value),
                              required=command is extract_parser,
                              help="expected digest of the input file, or locked")
         command.add_argument("--root-partition", type=int, help="partition number (0 for unpartitioned)")

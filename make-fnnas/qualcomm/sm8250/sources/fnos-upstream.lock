@@ -1,0 +1,10 @@
+# Explicit selection from upstream's fnnas_base_image release; never silently follow updates.
+[source]
+vendor = "fnOS (official ARM64 archive mirrored by ophub/fnnas)"
+architecture = "arm64"
+donor = "rockchip"
+version = "1253"
+release_asset = "fnnas-official-arm64-image_rockchip_1253.img.xz"
+image_url = "https://github.com/ophub/fnnas/releases/download/fnnas_base_image/fnnas-official-arm64-image_rockchip_1253.img.xz"
+bytes = 1838854224
+sha256 = "0453f9b98cf1cdc8b710fc7f1b040c73160d10d5f66b131cfaf722226c877066"

@@ -1,6 +1,12 @@
 name: Prepare official fnOS base
 on:
-  workflow_dispatch:
+  push:
+    branches: [codex/qualcomm-sm8250, 'pr/qualcomm-*']
+    paths:
+      - '.github/workflows/build-fnos.yml'
+      - '.github/actions/prepare-fnos-base/**'
+      - 'make-fnnas/qualcomm/sm8250/sources/fnos-upstream.lock'
+      - 'make-fnnas/qualcomm/sm8250/scripts/base_image.py'
 
 permissions:
   contents: read
@@ -13,10 +19,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Download the locked base from the vendor
-        env:
-          FNOS_SIGNED_URL: ${{ secrets.FNOS_SIGNED_URL }}
-        run: ./renas -b xiaomi-umi download "$RUNNER_TEMP/fnos.img.gz" --url "$FNOS_SIGNED_URL"
+      - name: Download and verify the pinned public upstream base
+        run: ./renas -b xiaomi-umi download "$RUNNER_TEMP/fnos.img.xz"
       - name: Install image tooling
         run: |
           sudo apt-get update -qq
@@ -25,7 +29,7 @@ jobs:
       - name: Audit the verified base
         uses: ./.github/actions/prepare-fnos-base
         with:
-          image: ${{ runner.temp }}/fnos.img.gz
+          image: ${{ runner.temp }}/fnos.img.xz
           sha256: locked
           output: out/base-image-report
       - name: Save audit results
@@ -40,4 +44,4 @@ jobs:
           FNOS_PYTHON: /usr/bin/python3
           LIBGUESTFS_BACKEND: direct
           LIBGUESTFS_BACKEND_SETTINGS: force_tcg
-        run: ./renas -b xiaomi-umi extract "$RUNNER_TEMP/fnos.img.gz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked
+        run: ./renas -b xiaomi-umi extract "$RUNNER_TEMP/fnos.img.xz" "$RUNNER_TEMP/rootfs.tar" --sha256 locked
