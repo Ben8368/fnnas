@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
+/* Match the Umi ABL Fastboot reboot reason used by the board sources. */
+&{/soc@0/spmi@c440000/pmic@0/pon@800} {
+	mode-bootloader = <0x2>;
+};
+
 /* The donor disables the ADSP that provides LPASS clocks. Keep its
  * dependent sound card, VA macro and RX/TX SoundWire controllers offline
  * until the Umi audio chain is supported.

@@ -57,6 +57,12 @@ if lab:
         require('qcom,wireless-rx' in properties(node('umi_charger')),
                 'wireless RX charger reference')
 else:
+    pon = '/soc@0/spmi@c440000/pmic@0/pon@800'
+    require(get(pon, 'compatible') == 'qcom,pm8998-pon'
+            and get(pon, 'mode-bootloader', 'u') == '2', 'PM8150 Fastboot reboot mode')
+    ramoops = '/reserved-memory/ramoops@b0000000'
+    require(get(ramoops, 'compatible') == 'ramoops'
+            and get(ramoops, 'console-size', 'x') == '200000', 'ramoops console log')
     pmic = '/soc@0/spmi@c440000/pmic@2'
     charger = pmic + '/charger@1000'
     adc = pmic + '/adc@3100'
