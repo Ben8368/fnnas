@@ -15,6 +15,7 @@ from base_image import digest, mounted, open_disk, inventory
 
 
 REQUIRED_FIRMWARE = {"qcom/sm8250/a650_zap.mbn", "qcom/a650_gmu.bin", "qcom/a650_sqe.fw"}
+QCA6390_FIRMWARE = {"qca/htbtfw20.tlv", "qca/htnv20.bin"}
 FSTAB = "UUID={uuid} / btrfs defaults,noatime,compress=zstd:1,subvolid=5 0 1\ntmpfs /tmp tmpfs defaults,nosuid 0 0\n"
 UPDATE_MASKS = ("apt-daily.timer", "apt-daily-upgrade.timer", "apt-daily-upgrade.service", "resize-rootfs.service")
 USB_ACM_UNIT = "umi-usb-acm.service"
@@ -51,7 +52,20 @@ STAGING_MODES = {"/": 0o755, "/etc": 0o755, "/usr": 0o755, "/root": 0o700}
 
 # These are Umi adaptations of the pinned donor. Keep its enablement and
 # adjust only the hardware or runtime prerequisite that was found missing.
+DONOR_MODULE_REQUESTS = {
+    "etc/modules": ("msr",),
+    "etc/modules-load.d/trim-fullconenat-nft.conf": ("nft_fullcone",),
+    "etc/modules-load.d/trim-rk_vcodec.conf": ("rga3", "rknpu", "rk_vcodec"),
+    "etc/modules-load.d/trim-zfs.conf": ("zfs",),
+}
+TLS_CERT = "/usr/trim/etc/ssl.crt/ca.crt"
 NATIVE_SERVICE_POLICY = {
+    "etc/systemd/system/trim_init.service": (
+        "/usr/trim/bin/triminit", "[Unit]\nWants=postgresql@15-main.service\nAfter=postgresql@15-main.service\n"),
+    "etc/systemd/system/webdav.service": (
+        "/usr/trim/bin/webdav", f"[Unit]\nConditionPathExists={TLS_CERT}\n"),
+    "etc/systemd/system/smbftpd.service": (
+        "/usr/trim/bin/smbftpd -D", f"[Unit]\nConditionPathExists={TLS_CERT}\n"),
     "etc/systemd/system/led-set.service": (
         "/usr/trim/bin/system_setled.sh", "[Unit]\nConditionPathExists=/boot/board.json\n"),
     "etc/systemd/system/set_gpio-init.service": (
@@ -83,6 +97,20 @@ EXIM_LOG_POLICY = "d /var/log/exim4 2750 Debian-exim adm -\n"
 
 def service_dropin(path):
     return f"etc/systemd/system/{Path(path).name}.d/90-umi-compat.conf"
+
+
+def remove_donor_module_requests(root):
+    for name, expected in DONOR_MODULE_REQUESTS.items():
+        path = inside(root, name)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Expected a donor module configuration file at {name}")
+        lines = path.read_text().splitlines(keepends=True)
+        active = tuple(line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#"))
+        if active != expected:
+            raise ValueError(f"Donor module configuration changed: {name}")
+        # Preserve the donor's comments and the /etc/modules alias.
+        replace_file(path, "".join(f"# Umi: {line}" if line.strip() in expected else line for line in lines))
+        path.chmod(0o644)
 
 
 def apply_native_service_policy(root):
@@ -143,8 +171,11 @@ def install_firmware(root, filename, expected):
         entries = {}
         for member in archive.getmembers():
             path = Path(member.name)
+            if member.isdir() and path.parts == ("qca",):
+                continue
             if (path.is_absolute() or ".." in path.parts or not path.parts
-                    or path.parts[0] not in {"qcom", "ath11k"}):
+                    or (path.parts[0] not in {"qcom", "ath11k"}
+                        and path.as_posix() not in QCA6390_FIRMWARE)):
                 raise ValueError(f"Unexpected firmware path: {member.name}")
             if member.isdir():
                 continue
@@ -153,6 +184,8 @@ def install_firmware(root, filename, expected):
             entries[str(path)] = member
         if not REQUIRED_FIRMWARE <= entries.keys():
             raise ValueError(f"Firmware bundle missing {sorted(REQUIRED_FIRMWARE - entries.keys())}")
+        if QCA6390_FIRMWARE & entries.keys() and not QCA6390_FIRMWARE <= entries.keys():
+            raise ValueError("QCA6390 Bluetooth patch and NVM must be supplied together")
         manifest = {}
         firmware = inside(root, "usr/lib/firmware")
         for name, member in sorted(entries.items()):
@@ -248,6 +281,7 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
         path.symlink_to("/dev/null")
     fix_donor_boot_services(root, system)
     apply_native_service_policy(root)
+    remove_donor_module_requests(root)
     for name, mode in CONSOLE_FILES.items():
         path = inside(root, name)
         if not path.is_file() or path.is_symlink():
@@ -288,6 +322,7 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
     install_firmware(root, firmware, firmware_sha256)
     policy = {"removed_donor_module_versions": info["rootfs"]["kernel_module_versions"],
               "original_fstab": original, "corrected_modes": mode_changes,
+              "disabled_donor_module_requests": DONOR_MODULE_REQUESTS,
               "masked_units": (*UPDATE_MASKS, DONOR_GETTY), "disabled_donor_hooks": disabled_hooks,
               "donor_wsdd2_exec": f"/{WSD_DAEMON} -4", "apt_pinned_packages": held,
               "ota": "vendor OTA unverified; do not run upgrades on Umi"}
@@ -307,10 +342,22 @@ def verify(image, kernel, uuid):
             with mounted(guest, part):
                 if guest.btrfs_subvolume_get_default("/") != 5 or guest.btrfs_subvolume_list("/"):
                     raise ValueError("Unexpected target Btrfs subvolume layout")
+                firmware = json.loads(guest.cat("/etc/umi-build/firmware.json"))["files"]
+                if not REQUIRED_FIRMWARE <= firmware.keys():
+                    raise ValueError("Incomplete on-image firmware manifest")
+                for name, sha256 in sorted(firmware.items()):
+                    path = f"/usr/lib/firmware/{name}"
+                    if guest.is_symlink(path) or guest.checksum("sha256", path) != sha256:
+                        raise ValueError(f"On-image firmware bytes mismatch: {name}")
+                    print(f"{sha256}  {path}")
                 info, _, _, modules = inventory(guest)
                 if (modules != [release] or guest.ls("/lib/modules") != [release] or guest.ls("/boot")
                         or info["fstab"] != FSTAB.format(uuid=uuid)):
                     raise ValueError("Wrong RootFS modules, fstab or stale boot files")
+                for path in DONOR_MODULE_REQUESTS:
+                    if any(line.strip() and not line.lstrip().startswith("#")
+                           for line in guest.cat(f"/{path}").splitlines()):
+                        raise ValueError(f"Unresolved donor module load requests: {path}")
                 for path, mode in STAGING_MODES.items():
                     if (guest.statns(path)["st_mode"] & 0o7777) != mode:
                         raise ValueError(f"RootFS directory mode mismatch: {path}")

@@ -42,6 +42,13 @@ class NativeRootfsTests(unittest.TestCase):
                 unit = root / path
                 unit.write_text(f"[Service]\nExecStart={command}\nEnvironmentFile=-/etc/nut/nut.conf\n")
                 unit.chmod(0o755)
+            for name, modules in native.DONOR_MODULE_REQUESTS.items():
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("# donor\n" + "\n".join(modules) + "\n")
+            zram = root / "etc/modules-load.d/20-zram-generator.conf"
+            zram.write_text("zram\n")
+            (root / "etc/modules-load.d/modules.conf").symlink_to("../modules")
             (root / "etc/passwd").write_text("Debian-exim:x:106:117::/var/spool/exim4:/usr/sbin/nologin\n")
             (root / "etc/group").write_text("adm:x:4:\n")
             wsdd2 = root / native.WSD_DAEMON
@@ -65,7 +72,7 @@ class NativeRootfsTests(unittest.TestCase):
             (work / "packages.txt").write_text("linux-image-old\t1\tarm64\ntrim\t1\tall\n")
             firmware = work / "firmware.tar"
             with tarfile.open(firmware, "w") as archive:
-                for path in sorted(native.REQUIRED_FIRMWARE):
+                for path in sorted(native.REQUIRED_FIRMWARE | native.QCA6390_FIRMWARE):
                     member = tarfile.TarInfo(path)
                     member.size = 3
                     archive.addfile(member, io.BytesIO(b"abc"))
@@ -91,6 +98,10 @@ class NativeRootfsTests(unittest.TestCase):
                 self.assertEqual(unit.stat().st_mode & 0o111, 0)
                 self.assertEqual((root / native.service_dropin(path)).read_text(), dropin)
             self.assertEqual((root / native.EXIM_TMPFILES).read_text(), native.EXIM_LOG_POLICY)
+            self.assertEqual(zram.read_text(), "zram\n")
+            self.assertEqual((root / "etc/modules-load.d/modules.conf").readlink(), Path("../modules"))
+            for name, modules in native.DONOR_MODULE_REQUESTS.items():
+                self.assertEqual((root / name).read_text(), "# donor\n" + "".join(f"# Umi: {m}\n" for m in modules))
             self.assertIn("ExecStart=/usr/trim/bin/wsdd2 -4", (root / native.WSD_UNIT).read_text())
             self.assertFalse((root / "etc/systemd/system/serial-getty@.service").is_symlink())
             for name, mode in native.CONSOLE_FILES.items():
@@ -101,6 +112,22 @@ class NativeRootfsTests(unittest.TestCase):
             self.assertEqual(pstore_link.readlink(), Path("/lib/systemd/system/systemd-pstore.service"))
             self.assertEqual((root / "etc/initramfs-tools/update-initramfs.conf").read_text(), "update_initramfs=no\n")
             self.assertTrue((root / "usr/lib/firmware/qcom/sm8250/a650_zap.mbn").is_file())
+
+    def test_qca6390_firmware_must_be_complete_and_cannot_include_other_chips(self):
+        for paths, error in (
+            (native.QCA6390_FIRMWARE - {"qca/htnv20.bin"}, "must be supplied together"),
+            (native.QCA6390_FIRMWARE | {"qca/hpbtfw21.tlv"}, "Unexpected firmware path"),
+        ):
+            with self.subTest(paths=paths), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                firmware = root / "firmware.tar"
+                with tarfile.open(firmware, "w") as archive:
+                    for path in sorted(native.REQUIRED_FIRMWARE | paths):
+                        member = tarfile.TarInfo(path)
+                        member.size = 3
+                        archive.addfile(member, io.BytesIO(b"abc"))
+                with self.assertRaisesRegex(ValueError, error):
+                    native.install_firmware(root, firmware, native.digest(firmware, "sha256"))
 
     def test_untrusted_firmware_member_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
