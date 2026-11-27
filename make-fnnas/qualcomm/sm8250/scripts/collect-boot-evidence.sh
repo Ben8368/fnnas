@@ -56,6 +56,10 @@ section 'Btrfs capacity (bytes)' btrfs filesystem usage -b /
 section 'Kernel registered filesystems' cat /proc/filesystems
 section 'Btrfs device counters (not reset)' btrfs device stats /
 section 'Root disk partition table (read-only)' root_gpt
+section 'Process accounting (PID 1)' cat /proc/1/io
+section 'Visible process sample' ps -p 1,$$ -o pid,comm
+section 'Resource monitor services' systemctl show -p Id,LoadState,ActiveState,SubState,Result,MainPID resmon_service.service sysinfo_service.service
+section 'ZFS installed module vermagic' modinfo -F vermagic zfs
 section 'Clock status' timedatectl status
 printf '\n===== COLLECTION END (status=%s) =====\n' "$failed"
 exit "$failed"

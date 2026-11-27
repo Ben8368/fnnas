@@ -2,7 +2,11 @@
 """Host regressions for pre-enrollment USB diagnostics (no USB devices needed)."""
 import importlib.util
 from pathlib import Path
+import os
+import select
 import subprocess
+import tempfile
+import tty
 from types import SimpleNamespace
 import unittest
 
@@ -19,6 +23,8 @@ class NativeUsbTests(unittest.TestCase):
             with self.subTest(pid=pid):
                 port = SimpleNamespace(vid=0x1D6B, pid=pid, serial_number="UMI-LOG", device="COM9")
                 self.assertEqual(capture.classify_port(port), ("COM9", False))
+        port.serial_number = "UMI-JOURNAL"
+        self.assertEqual(capture.classify_port(port), ("COM9", False))
         port.serial_number = "UMI-ACM"
         self.assertEqual(capture.classify_port(port), ("COM9", True))
         port.serial_number = None
@@ -47,3 +53,31 @@ class NativeUsbTests(unittest.TestCase):
             "recent_kernel_warnings=3 usb=1 storage=1 display=1", "UMI_BOOTLOG/1 END",
             "dtbo_index=unavailable", "panel_id=unavailable",
         ])
+
+    def test_debug_reader_replays_only_on_fixed_request(self):
+        master, slave = os.openpty()
+        self.addCleanup(os.close, master)
+        self.addCleanup(os.close, slave)
+        tty.setraw(slave)
+        with tempfile.TemporaryDirectory() as temp:
+            journal = Path(temp) / "journalctl"
+            journal.write_text('#!/bin/sh\nprintf "%s\\n" "$*"\nexec sleep 30\n')
+            journal.chmod(0o755)
+            with subprocess.Popen(["bash", "-c", 'source "$1"; debug_console "$2"',
+                                   "test", str(overlay / "usr/local/sbin/umi-usb-bootlog"),
+                                   os.ttyname(slave)], env=dict(os.environ, PATH=temp+":"+os.environ["PATH"]),
+                                  start_new_session=True) as reader:
+                try:
+                    os.write(master, b"x")
+                    self.assertFalse(select.select([master], [], [], 0.2)[0])
+                    for _ in range(2):
+                        os.write(master, b"J")
+                        frame = b""
+                        while b"--follow" not in frame:
+                            self.assertTrue(select.select([master], [], [], 3)[0], repr(frame))
+                            frame += os.read(master, 1024)
+                        self.assertIn(b"UMI_JOURNAL/1 BEGIN", frame)
+                        self.assertIn(b"--boot=0", frame)
+                        self.assertIn(b"--lines=all", frame)
+                finally:
+                    os.killpg(reader.pid, 15)

@@ -45,7 +45,11 @@ printf '0x02\n' > "$g/bDeviceSubClass"
 printf '0x01\n' > "$g/bDeviceProtocol"
 printf 'fnOS Umi USB setup\n' > "$strings/product"
 printf 'Xiaomi Umi\n' > "$strings/manufacturer"
-printf 'umi-log\n' > "$strings/serialnumber"
+if [[ -f /etc/umi-build/usb-full-journal ]]; then
+    printf 'umi-journal\n' > "$strings/serialnumber"
+else
+    printf 'umi-log\n' > "$strings/serialnumber"
+fi
 ln -s -- "$acm" "$c/acm.usb0"
 
 if mkdir -- "$ncm" && printf 'umiusb%%d\n' > "$ncm/ifname" && ln -s -- "$ncm" "$c/ncm.usb0" &&

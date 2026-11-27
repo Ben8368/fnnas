@@ -81,6 +81,7 @@ if [[ $profile != lab-* && ${PACKAGE_UMI_KERNEL:-false} == true ]]; then
         rm -f "$module_root/lib/modules/$krel/build" "$module_root/lib/modules/$krel/source"
         depmod -b "$module_root" "$krel"
     fi
+    bash make-fnnas/qualcomm/sm8250/scripts/build-openzfs.sh "$work/kernel/linux" "$kernel_out" "$module_root" "$work/openzfs"
     python3 -B make-fnnas/qualcomm/sm8250/scripts/kernel-release.py pack "$kernel_out" "$module_root" "$work/evidence" \
         --profile "$profile" --source "$(< "$work/evidence/project.sha")"
 fi

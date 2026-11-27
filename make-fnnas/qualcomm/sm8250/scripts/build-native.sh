@@ -103,6 +103,7 @@ uuid=$(uuidgen -r | tr '[:upper:]' '[:lower:]')
 bash "$scripts/apply-files.sh" "$staged"
 "$FNOS_PYTHON" -B "$scripts/native-rootfs.py" prepare "$staged" "$report" "$firmware" "$firmware_sha" "$uuid"
 if (( debug )); then
+    install -m644 /dev/null "$staged/etc/umi-build/usb-full-journal"
     install -m644 "$kernel/$package_record" "$staged/etc/umi-build/$provenance"
 fi
 if (( lineage )); then
@@ -119,6 +120,9 @@ modules=$(realpath -m -- "$staged/lib/modules/$release")
 [[ $modules == "$staged/"* && ! -e $modules && ! -L $modules ]]
 mkdir -p -- "$modules"
 rsync -a --chown=0:0 -- "$kernel/lib/modules/$release/" "$modules/"
+if [[ -f $modules/extra/openzfs/zfs.ko ]]; then
+    printf 'zfs\n' > "$staged/etc/modules-load.d/90-umi-openzfs.conf"
+fi
 mv -- "$scratch/boot-work/boot/"boot-umi-*.img "$result/boot.img"
 bash "$scripts/assemble-rootfs.sh" "$staged" btrfs "$uuid" "$result/rootfs.img"
 UMI_NATIVE_BTRFS=1 bash "$scripts/verify-release.sh" "$result/boot.img" "$result/rootfs.img" "$kernel"

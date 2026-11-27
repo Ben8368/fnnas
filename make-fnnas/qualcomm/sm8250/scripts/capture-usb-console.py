@@ -13,6 +13,8 @@ def classify_port(port):
     identity = port.vid, port.pid, (port.serial_number or "").lower()
     if identity == (0x1D6B, 0x0104, "umi-acm"):
         return port.device, True  # older serial-login image
+    if identity[:2] in {(0x1D6B, 0x0103), (0x1D6B, 0x0104)} and identity[2] == "umi-journal":
+        return port.device, False
     if identity in {(0x1D6B, 0x0103, "umi-log"), (0x1D6B, 0x0104, "umi-log")}:
         return port.device, False  # diagnostics only
     return None
@@ -33,7 +35,8 @@ def main():
         parser.exit(1, "Install pyserial with python -m pip install pyserial\n")
 
     def find_ports():
-        return list(filter(None, map(classify_port, list_ports.comports())))
+        return [(match, (port.serial_number or "").lower() == "umi-journal")
+                for port in list_ports.comports() if (match := classify_port(port))]
 
     console = Console() if args.interactive else None
     stop = threading.Event()
@@ -80,13 +83,18 @@ def main():
                     event("Waiting for Umi USB ACM" if not ports else "Multiple Umi ports present; waiting")
                     stop.wait(0.5)
                     continue
-                (port, accepts_input), = ports
+                ((port, accepts_input), journal), = ports
+                link = None
                 try:
                     link = serial.Serial(baudrate=115200, timeout=0.25, write_timeout=0.5)
                     link.port = port
                     link.dtr = link.rts = False
                     link.open()
+                    if journal:
+                        link.write(b"J")
                 except serial.SerialException as error:
+                    if link is not None:
+                        link.close()
                     event(f"Cannot open {port}: {error}")
                     stop.wait(0.5)
                     continue
@@ -95,18 +103,29 @@ def main():
                 event(f"Connected {port}" + (" (read-only boot diagnostics)" if not accepts_input else ""))
                 try:
                     check_port_at = time.monotonic() + 1
+                    # A host may enumerate ACM before the debug reader opens it.
+                    retry_at = time.monotonic() + 4
+                    awaiting_journal = journal
+                    marker_tail = b""
                     while not stop.is_set():
                         try:
+                            if awaiting_journal and time.monotonic() >= retry_at:
+                                link.write(b"J")
+                                retry_at = time.monotonic() + 4
                             data = link.read(4096)
                         except serial.SerialException as error:
                             event(f"Disconnected {port}: {error}")
                             break
                         if data:
+                            if awaiting_journal:
+                                marker_tail += data
+                                awaiting_journal = b"UMI_JOURNAL/1 BEGIN" not in marker_tail
+                                marker_tail = marker_tail[-32:]
                             raw.write(data)
                             if console is not None:
                                 console.write_bytes(data)
                         if time.monotonic() >= check_port_at:
-                            if (port, accepts_input) not in find_ports():
+                            if ((port, accepts_input), journal) not in find_ports():
                                 event(f"Disconnected {port}")
                                 break
                             check_port_at = time.monotonic() + 1

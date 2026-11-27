@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-only
-# Expose only fixed diagnostics. Do not read from the ACM endpoint, expose a
-# shell, or emit raw journal messages, cmdlines, service logs or identifiers.
+# Release images expose only the fixed diagnostics. Debug images can also
+# replay the local journal over the physical ACM link.
 set -euo pipefail
 
 safe_boot_fields() {
@@ -58,9 +58,45 @@ snapshot() {
 	printf 'UMI_BOOTLOG/1 END\n'
 }
 
+# The fixed J byte requests replay after a late host open or reconnect. No
+# host text is interpreted as a command or passed to journalctl.
+debug_console() (
+	local tty=$1 key reader=
+	exec 3<>"$tty"
+	stop_reader() {
+		if [[ -n $reader ]]; then
+			kill "$reader" 2>/dev/null || true
+			wait "$reader" 2>/dev/null || true
+			reader=
+		fi
+	}
+	trap stop_reader EXIT
+	while true; do
+		if IFS= read -r -n 1 -t 10 -u 3 key; then
+			if [[ $key == J ]]; then
+				stop_reader
+				printf 'UMI_JOURNAL/1 BEGIN\r\n' >&3
+				journalctl --boot=0 --no-pager --output=short-monotonic --lines=all --follow >&3 &
+				reader=$!
+			fi
+		else
+			# A timeout keeps the descriptor open; a hangup needs a fresh open.
+			(( $? > 128 )) || return 0
+			if [[ -z $reader ]]; then
+				snapshot | sed 's/$/\r/' | timeout -k 1 2 tee /dev/fd/3 >/dev/null || true
+			fi
+		fi
+	done
+)
+
 main() {
 	timeout -k 1 2 stty -F /dev/ttyGS0 raw -echo clocal -opost
 	boot_fields=$(safe_boot_fields </proc/cmdline)
+	if [[ -f /etc/umi-build/usb-full-journal ]]; then
+		dtbo=$(dtbo_digest) || dtbo=
+		while [[ -c /dev/ttyGS0 ]]; do debug_console /dev/ttyGS0; sleep 1; done
+		return
+	fi
 	while [[ -c /dev/ttyGS0 ]]; do
 		# Bind each frame to a fresh, read-only digest of the shipped DTBO partition.
 		dtbo=$(dtbo_digest) || dtbo=

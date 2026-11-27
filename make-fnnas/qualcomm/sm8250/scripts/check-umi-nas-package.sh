@@ -5,10 +5,10 @@ set -euo pipefail
 package=${1:?Umi kernel package}
 release=$(< "${2:?kernel.release from the same build}")
 [[ $release =~ ^6\.18\.[0-9]+-csot(60|90)-sm8250$ ]]
-archive_root=lib/modules/$release/kernel
+archive_root=lib/modules/$release
 scratch=$(mktemp -d)
 trap 'rm -f -- "$scratch/module.ko"; rmdir -- "$scratch"' EXIT
-for path in fs/nfsd/nfsd.ko net/openvswitch/openvswitch.ko; do
+for path in kernel/fs/nfsd/nfsd.ko kernel/net/openvswitch/openvswitch.ko extra/openzfs/{spl,zfs}.ko; do
     # Stream only the requested member. No paths/symlinks from the archive
     # are used as local destinations.
     tar -xOzf "$package" -- "$archive_root/$path" > "$scratch/module.ko"
