@@ -33,3 +33,13 @@ sudo python3 rehearse-umi-storage.py GPT_JSON --disk-bytes DISK_BYTES \
 4. 创建后验收 Web 文件管理、普通用户权限、写入读回以及 Fastboot 往返后的持久性。当前启动曾出现 `/fs` 挂载的 `unknown filesystem type 'trimafs'`，需要确认是否影响 fnOS 的存储和共享功能。如果向导不识别剩余空间或创建失败，先检查日志；可另评估独立数据分区加常规文件系统和文件共享，不把 Linux 能挂载等同于 fnOS 已接管。
 
 划分后 Fastboot 的 `userdata` 容量会变小。后续安装仍应预检该分区容量；禁止使用会重建整盘 GPT 的刷机方式，否则用户数据分区可能丢失。
+
+## 用原厂 GPT 字节和飞牛 ARM64 用户态做的补充实验（仅限虚拟磁盘）
+
+在 QEMU 中使用与 Umi 一致的 4096 字节逻辑扇区、34 项分区、原始主备 GPT 元数据副本和已校验的原生 Btrfs 镜像。以第 34 分区为只读根，调用镜像中未修改的 `libndev.so`：`is_sys_disk` 对模拟主盘返回 1，`get_sys_disk_free_space_partno()` 返回 35。客体枚举为 `sdb` 而非手机上的 `sda`；不是把设备名硬编码成系统盘。在一次性快照中单独重放该版本 `storage.hdl` 系统盘分区路径使用的 `parted` 参数，产生了起始 LBA 19,660,800、大小 **174,247,116,800 字节**的 Linux RAID 类型分区。末尾余 251 个逻辑扇区，这是对齐，不是少识别了 160 GiB。没有经过 Web 建卷接口，不能据此认为飞牛已接管新卷。
+
+**不能只看 `sfdisk --verify`。** 上述分区命令成功，原 34 个逻辑分区未变，但逐字节对比发现保护 MBR 也有改动，备份 GPT 表头中的数组起点从 62,201,851 移至 62,201,853。Linux 能正常读新表不代表手机引导链或回滚流程接受它。不要对真机照抄 `parted` 命令。也不能把改表前的备份直接恢复到已有数据卷的设备上。
+
+`prepare-umi-storage-fixture.py` 为这台 **256 GB / 4 KiB** Umi 生成独立的离线实验输入，不是刷机程序。传入 `sfdisk` JSON、之前独立核验的两个**仅元数据**文件及 SHA-256、当时单设备 Btrfs 的设备字节数和一个不存在的输出目录。工具核对主备表的 CRC、原始分区条目、布局和身份，拒绝包含最后一个 userdata 扇区的宽窗口备份。默认只模拟缩短 userdata；可选 `--test-data-guid UUID` 在试验副本中增加一个与飞牛路径编号、类型和容量一致的空条目。两个模式均保留原 PMBR、备份数组位置、厂商分区及填充字节。输出 `*.fixture` **不是通用镜像，不得用 fastboot 刷写**。测试 GUID 不得用于其他设备。
+
+`plan-umi-storage.py` 的 `--verify-after JSON` 用于检查缩尾后的逻辑 GPT；`--verify-created JSON` 专门检查该版系统盘路径新增的单个 RAID 类型分区（验证编号、起始位置、容量、PARTUUID 及其他分区不变）。两者都以切分前的 GPT 和 Btrfs 设备边界为输入；都不替代原始主备元数据对比。预留第 35 项只是避免 `parted` 重排 GPT 的一种待验证方案：仍需证明 fnOS 向导接受它、只格式化该分区、不重建整盘，并在重新启动后保留数据。

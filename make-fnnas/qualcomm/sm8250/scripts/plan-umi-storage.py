@@ -87,16 +87,58 @@ def verify_split(before, after, root_device, filesystem_bytes):
     return result | {"mode": "read-only verification; only userdata length changed"}
 
 
+def verify_created(before, after, root_device, filesystem_bytes):
+    """Check the single-partition layout produced by the pinned ARM64 system-tail path."""
+    original = before["partitiontable"]
+    disk = original["device"]
+    if not root_device.startswith(disk) or not root_device[len(disk):].isdecimal():
+        raise ValueError("unexpected UFS root node")
+    next_number = int(root_device[len(disk):]) + 1
+    node = f"{disk}{next_number}"
+    count = original["table-length"]  # sfdisk also emits this GPT field as a string.
+    if isinstance(count, str) and count.isascii() and count.isdecimal():
+        count = int(count)
+    if next_number > natural(count, "GPT table length"):
+        raise ValueError("no free GPT entry after root")
+    data = deepcopy(after)
+    parts = data["partitiontable"]["partitions"]
+    added = [p for p in parts if p["node"] == node]
+    if len(added) != 1 or any(p["node"] == node for p in original["partitions"]):
+        raise ValueError(f"expected exactly one new partition {node}")
+    part, = added
+    parts.remove(part)
+    result = verify_split(before, data, root_device, filesystem_bytes)
+    tail = result["unallocated_tail_for_user_storage"]
+    start = natural(part["start"], "data partition start")
+    size = natural(part["size"], "data partition size")
+    slack = tail["end_lba_inclusive"] + 1 - start - size
+    if start != tail["start_lba"] or not 0 <= slack * result["sector_bytes"] < ALIGN_BYTES:
+        raise ValueError("data partition does not match the planned tail")
+    if UUID(part["type"]) != UUID("a19d880f-05fc-4d3b-a006-743f0f84911e"):
+        raise ValueError("expected the Linux RAID partition type from the fnOS system-disk path")
+    guid = UUID(part["uuid"])
+    if not guid.int or str(guid) in {str(UUID(p["uuid"])) for p in original["partitions"]}:
+        raise ValueError("missing or reused data PARTUUID")
+    return result | {"mode": "read-only GPT verification; not fnOS volume acceptance",
+                     "data_partition": {"node": node, "bytes": size * result["sector_bytes"],
+                                        "partuuid": str(guid), "unused_trailing_sectors": slack}}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("gpt_capture", type=Path)
     parser.add_argument("--root-device", required=True, help="mounted root block device from findmnt")
     parser.add_argument("--btrfs-device-bytes", type=int, required=True, help="Device size from Btrfs usage")
-    parser.add_argument("--verify-after", type=Path, help="verify a subsequent sfdisk JSON capture before creating the data volume")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--verify-created", type=Path, help="check the GPT after fnOS makes its single system-tail RAID partition")
+    group.add_argument("--verify-after", type=Path, help="verify a subsequent sfdisk JSON capture before creating the data volume")
     args = parser.parse_args()
     try:
         data = json.loads(args.gpt_capture.read_text(encoding="utf-8"))
-        if args.verify_after:
+        if args.verify_created:
+            after = json.loads(args.verify_created.read_text(encoding="utf-8"))
+            result = verify_created(data, after, args.root_device, args.btrfs_device_bytes)
+        elif args.verify_after:
             after = json.loads(args.verify_after.read_text(encoding="utf-8"))
             result = verify_split(data, after, args.root_device, args.btrfs_device_bytes)
         else:
