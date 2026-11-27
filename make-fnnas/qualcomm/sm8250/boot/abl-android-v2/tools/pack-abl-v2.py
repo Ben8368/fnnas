@@ -36,11 +36,6 @@ def split_boot(image):
 
 
 def repack(template, kernel, ramdisk, dtb, root_uuid, *, append_cmdline=b"", native_cmdline=None):
-    _, (kaddr, raddr, dtb_addr), page = layout(template)
-    if kernel[:2] != b"\x1f\x8b" or ramdisk[:2] != b"\x1f\x8b" or dtb[:4] != b"\xd0\x0d\xfe\xed":
-        raise ValueError("expected gzip kernel, gzip ramdisk, and valid DTB magic")
-    if kaddr + len(kernel) > raddr or raddr + len(ramdisk) > dtb_addr:
-        raise ValueError("boot segments overlap in the template load layout")
     cmdline = template[64:576].split(b"\0", 1)[0]
     extra = template[608:1632].split(b"\0", 1)[0]
     if extra:
@@ -67,6 +62,17 @@ def repack(template, kernel, ramdisk, dtb, root_uuid, *, append_cmdline=b"", nat
         if any(c < 32 or c > 126 for c in append_cmdline):
             raise ValueError("extra command line must be printable ASCII")
         cmdline += b" " + append_cmdline
+    return pack_boot(template, kernel, ramdisk, dtb, cmdline)
+
+
+def pack_boot(template, kernel, ramdisk, dtb, cmdline):
+    _, (kaddr, raddr, dtb_addr), page = layout(template)
+    if kernel[:2] != b"\x1f\x8b" or ramdisk[:2] != b"\x1f\x8b" or dtb[:4] != b"\xd0\x0d\xfe\xed":
+        raise ValueError("expected gzip kernel, gzip ramdisk, and valid DTB magic")
+    if kaddr + len(kernel) > raddr or raddr + len(ramdisk) > dtb_addr:
+        raise ValueError("boot segments overlap in the template load layout")
+    if any(c < 32 or c > 126 for c in cmdline):
+        raise ValueError("boot command line must be printable ASCII")
     if len(cmdline) >= 512:
         raise ValueError("boot command line does not fit in the primary field")
     header = bytearray(template[:page])

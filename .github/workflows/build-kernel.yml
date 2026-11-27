@@ -5,6 +5,10 @@ on:
     paths:
       - '.github/workflows/build-kernel.yml'
       - 'make-fnnas/qualcomm/sm8250/kernel/**'
+      - 'make-fnnas/qualcomm/sm8250/boot/abl-android-v2/recovery/**'
+      - 'make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tests/**'
+      - 'make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/pack-abl-v2.py'
+      - 'make-fnnas/qualcomm/sm8250/boot/abl-android-v2/tools/make-ram-probe.py'
       - 'make-fnnas/qualcomm/sm8250/sources/**'
       - 'make-fnnas/qualcomm/sm8250/scripts/build-kernel.sh'
       - 'make-fnnas/qualcomm/sm8250/scripts/kernel-release.py'
@@ -42,11 +46,20 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross \
             build-essential git bc bison flex libssl-dev libelf-dev dwarves device-tree-compiler \
-            mkbootimg cpio initramfs-tools-core kmod pigz qemu-user-static e2fsprogs dpkg-dev zstd rsync
+            mkbootimg cpio initramfs-tools-core kmod pigz qemu-user-static python3-serial e2fsprogs dpkg-dev zstd rsync
           df -h "$RUNNER_TEMP"
           test "$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')" -ge 25
       - name: Build and verify selected kernel profile
         run: bash tools/ci-build.sh "$PROFILE" "$RUNNER_TEMP/umi"
+      - name: Test Umi RAM Recovery protocol and built-in kernel support
+        if: ${{ !startsWith(env.PROFILE, 'lab-') }}
+        shell: bash
+        run: |
+          evidence="$RUNNER_TEMP/umi/evidence"
+          {
+            cat "$evidence/project.sha" "$evidence/kernel-source.tsv"
+            bash make-fnnas/qualcomm/sm8250/boot/abl-android-v2/recovery/test-linux.sh "$evidence/kernel/.config"
+          } 2>&1 | tee "$evidence/recovery-test.log"
       - name: Prepare native fnOS acceptance handoff
         if: ${{ !startsWith(env.PROFILE, 'lab-') }}
         run: |
