@@ -72,14 +72,16 @@ NATIVE_SERVICE_POLICY = {
         "/usr/trim/bin/system_setgpio.sh", "[Unit]\nConditionPathExists=/boot/board.json\n"),
     "usr/lib/systemd/system/nut-server.service": (
         "/sbin/upsd -F", "[Service]\n"
-        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver) exit 0;; *) exit 1;; esac'\n"),
+        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver) exit 0;; *) exit 1;; esac'\n"
+        "ExecCondition=/usr/bin/grep -Eq '^[[:space:]]*[[][^]]+[]]' /etc/nut/ups.conf\n"),
     "usr/lib/systemd/system/nut-monitor.service": (
         "/sbin/upsmon -F", "[Service]\n"
-        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver|netclient) exit 0;; *) exit 1;; esac'\n"),
+        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver|netclient) exit 0;; *) exit 1;; esac'\n"
+        "ExecCondition=/usr/bin/grep -Eiq '^[[:space:]]*MONITOR[[:space:]]+' /etc/nut/upsmon.conf\n"),
     # No supported SMART devices is normal on the internal UFS. Leave the
     # scan and actionable errors enabled, including those on external disks.
     "usr/lib/systemd/system/smartmontools.service": (
-        "/usr/sbin/smartd -n $smartd_opts", "[Service]\nExecStart=\nExecStart=/usr/sbin/smartd -n -q errors,nodev0 $smartd_opts\n"),
+        "/usr/sbin/smartd -n $smartd_opts", "[Service]\nType=exec\nExecStart=\nExecStart=/usr/sbin/smartd -n -q errors,nodev0 $smartd_opts\n"),
     "etc/systemd/system/trim_trashbind.service": (
         "/usr/trim/bin/trashbind", "[Unit]\nConditionPathIsMountPoint=/fs\n"),
     # Do not substitute another libupnp SONAME or the system libc. The
@@ -88,6 +90,7 @@ NATIVE_SERVICE_POLICY = {
         "/usr/trim/bin/upnp_service", "[Service]\nExecCondition=/lib/ld-linux-aarch64.so.1 --list /usr/trim/bin/upnp_service\n"),
     "etc/systemd/system/trim_raid_check.service": (
         "/usr/trim/bin/check_raid456_resync_status",
+        "[Unit]\nConditionPathExistsGlob=/sys/block/md*/md/level\n"
         "[Service]\nExecCondition=/lib/ld-linux-aarch64.so.1 --list /usr/trim/bin/check_raid456_resync_status\n"),
 }
 EXIM_TMPFILES = "etc/tmpfiles.d/90-umi-exim.conf"
