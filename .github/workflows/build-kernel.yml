@@ -60,6 +60,17 @@ jobs:
             cat "$evidence/project.sha" "$evidence/kernel-source.tsv"
             bash make-fnnas/qualcomm/sm8250/boot/abl-android-v2/recovery/test-linux.sh "$evidence/kernel/.config"
           } 2>&1 | tee "$evidence/recovery-test.log"
+      - name: Verify NAS modules in the packaged Umi kernel
+        if: ${{ !startsWith(env.PROFILE, 'lab-') }}
+        shell: bash
+        run: |
+          evidence="$RUNNER_TEMP/umi/evidence"
+          packages=("$evidence/"*-qualcomm-sm8250-xiaomi-umi-csot*.tar.gz)
+          [[ ${#packages[@]} == 1 && -f ${packages[0]} ]]
+          {
+            cat "$evidence/project.sha" "$evidence/kernel-source.tsv"
+            bash make-fnnas/qualcomm/sm8250/scripts/check-umi-nas-package.sh "${packages[0]}" "$evidence/kernel/include/config/kernel.release"
+          } 2>&1 | tee "$evidence/nas-module-package-test.log"
       - name: Prepare native fnOS acceptance handoff
         if: ${{ !startsWith(env.PROFILE, 'lab-') }}
         run: |
