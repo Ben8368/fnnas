@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Local ARM64 / no-options mount corrections for the pinned VM experiment only.
+--- a/fs/trim_acl.c
++++ b/fs/trim_acl.c
+@@ -424,7 +424,7 @@
+ 
+ static struct trim_acl *get_inode_trim_acl(struct inode *inode)
+ {
+-	void *sentinel;
++	struct trim_acl *sentinel;
+ 	struct trim_acl **p;
+ 	struct trim_acl *acl;
+ 
+@@ -435,7 +435,7 @@
+ 	if (!IS_TRIMACL_INODE(inode))
+ 		return NULL;
+ 
+-	sentinel = uncached_acl_sentinel(current);
++	sentinel = (struct trim_acl *)uncached_acl_sentinel(current);
+ 	p = &inode->i_trim_acl;
+ 
+ 	/*
+--- a/fs/trimafs2/super.c
++++ b/fs/trimafs2/super.c
+@@ -363,7 +363,7 @@
+ 		return -ENOMEM;
+ 
+ 	fsi->mount_opts.mode = 0777;
+-	fsi->mount_opts.trimacl = false;
++	fsi->mount_opts.trimacl = true;
+ 	fsi->mount_opts.ino_mode = TRIMAFS2_INO_MODE_32;
+ 	atomic64_set(&fsi->next_branch_id, 0);
+ 	atomic64_set(&fsi->next_internal_id, 0);
