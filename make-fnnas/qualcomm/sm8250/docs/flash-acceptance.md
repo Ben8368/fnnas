@@ -21,12 +21,23 @@ fastboot -s "$SERIAL" getvar max-download-size
 
 完整包的默认安装顺序为 `dtbo → userdata → boot → reboot`，每一步完整成功后才继续。安装使用**随包 DTBO**，不以读回旧 DTBO、旧摘要或旧活动索引为前置条件。不要刷 LineageOS 的 `boot.img`、`recovery.img` 或 `vbmeta.img`。没有覆盖授权就不执行这条流程；不支持读回也不等于 DTBO 缺失。
 
+`rootfs.img` 通常远大于 fastboot 的 `max-download-size`。**不要直接用 `-S` 刷 raw 镜像**：当镜像小于目标分区时，fastboot 会在分片前执行 AVB footer 拷贝，把整个 raw 镜像读入内存；多 GiB 镜像会以 `fastboot: error: Failed reading from userdata` 失败，`-S` 的大小不影响这一步。先把 raw 镜像转成 Android sparse 镜像（`img2simg`，Debian/Ubuntu 包 `android-sdk-libsparse-utils`；macOS 可在 Linux VM 中执行，或使用仓库脚本）：
+
+```bash
+bash make-fnnas/qualcomm/sm8250/scripts/make-sparse-image.sh rootfs.img
+sha256sum rootfs.simg   # 单独记录；与 rootfs.img 的摘要不同
+```
+
+sparse 镜像的 chunk 默认不超过 64 MiB，fastboot 会按 `max-download-size` 自行分片，刷写时不要再传 `-S`：
+
 ```bash
 fastboot -s "$SERIAL" flash dtbo dtbo.img &&
-  fastboot -s "$SERIAL" flash userdata rootfs.img &&
+  fastboot -s "$SERIAL" flash userdata rootfs.simg &&
   fastboot -s "$SERIAL" flash boot boot.img &&
   fastboot -s "$SERIAL" reboot
 ```
+
+用 `tee` 记录 fastboot 日志时加 `set -o pipefail`，否则 `tee` 的退出码会掩盖 fastboot 的失败。stock DTBO 档位跳过 `dtbo` 写入，只写 `userdata` 和 `boot`。
 
 PowerShell 可逐步执行相同命令（用 `$serial` 保存序列号）；每次检查 `$LASTEXITCODE`、全部分片的写入结果和 Fastboot 日志，任何失败立即停止。记录目标序列号、前置检查、各分区摘要、各分片写入结果及重启结果。旧的显式读回调试包只有 `stock-dtbo.txt`，不是默认完整包；仅在另行核对同机已安装摘要与活动索引后保留现有 DTBO，跳过写 `dtbo` 的步骤。RAM 探针保留给需要它的独立诊断。
 
