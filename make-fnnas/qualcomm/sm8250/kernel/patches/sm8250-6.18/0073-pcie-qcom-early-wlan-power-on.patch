@@ -67,11 +67,11 @@ index 559aa85..c1d522f 100644
 +
 +	pwrseq = devm_pwrseq_get(&pmu->dev, "wlan");
 +	if (IS_ERR(pwrseq)) {
-+		dev_info(pcie->dev, "early WLAN power-on: pwrseq unavailable (%ld)\n",
++		dev_info(pcie->pci->dev, "early WLAN power-on: pwrseq unavailable (%ld)\n",
 +			 PTR_ERR(pwrseq));
 +	} else {
 +		ret = pwrseq_power_on(pwrseq);
-+		dev_info(pcie->dev, "early WLAN power-on: pwrseq_power_on -> %d\n",
++		dev_info(pcie->pci->dev, "early WLAN power-on: pwrseq_power_on -> %d\n",
 +			 ret);
 +	}
 +
