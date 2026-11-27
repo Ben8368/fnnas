@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Preview a Umi 64 GiB userdata / user data split from a captured GPT; never write a device."""
 import argparse
+from copy import deepcopy
 import json
 from pathlib import Path
 import sys
@@ -69,15 +70,38 @@ def plan(capture, root_device, filesystem_bytes):
     }
 
 
+def verify_split(before, after, root_device, filesystem_bytes):
+    result = plan(before, root_device, filesystem_bytes)
+    expected = deepcopy(before["partitiontable"])
+    actual = deepcopy(after["partitiontable"])
+    for table in (expected, actual):
+        table["partitions"].sort(key=lambda part: part["node"])
+    root = next(part for part in expected["partitions"] if part["node"] == root_device)
+    root["size"] = result["system"]["bytes"] // result["sector_bytes"]
+    if actual != expected:
+        before_nodes = {p["node"]: p for p in expected.pop("partitions")}
+        after_nodes = {p["node"]: p for p in actual.pop("partitions")}
+        changed = sorted(n for n in before_nodes.keys() | after_nodes.keys()
+                         if before_nodes.get(n) != after_nodes.get(n))
+        raise ValueError(f"unexpected GPT changes: header={actual != expected}, partitions={changed}")
+    return result | {"mode": "read-only verification; only userdata length changed"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("gpt_capture", type=Path)
     parser.add_argument("--root-device", required=True, help="mounted root block device from findmnt")
     parser.add_argument("--btrfs-device-bytes", type=int, required=True, help="Device size from Btrfs usage")
+    parser.add_argument("--verify-after", type=Path, help="verify a subsequent sfdisk JSON capture before creating the data volume")
     args = parser.parse_args()
     try:
         data = json.loads(args.gpt_capture.read_text(encoding="utf-8"))
-        print(json.dumps(plan(data, args.root_device, args.btrfs_device_bytes), indent=2))
+        if args.verify_after:
+            after = json.loads(args.verify_after.read_text(encoding="utf-8"))
+            result = verify_split(data, after, args.root_device, args.btrfs_device_bytes)
+        else:
+            result = plan(data, args.root_device, args.btrfs_device_bytes)
+        print(json.dumps(result, indent=2))
     except (OSError, AttributeError, KeyError, TypeError, ValueError) as exc:
         print(f"Refusing to plan: {exc}", file=sys.stderr)
         return 1

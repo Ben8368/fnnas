@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-only
+from copy import deepcopy
 import importlib.util
 from pathlib import Path
 import unittest
@@ -46,3 +47,24 @@ class UmiStorageTests(unittest.TestCase):
         self.data["partitiontable"]["lastlba"] += 1
         with self.assertRaisesRegex(ValueError, "unexpected free tail"):
             mod.plan(self.data, self.root, self.fs)
+
+    def smaller_capture(self):
+        after = deepcopy(self.data)
+        after["partitiontable"]["partitions"][-1]["size"] = 16_777_216
+        return after
+
+    def test_verify_after_rejects_changed_stock_attributes(self):
+        after = self.smaller_capture()
+        after["partitiontable"]["partitions"][0]["attrs"] = "GUID:60"
+        with self.assertRaisesRegex(ValueError, "/dev/sda33"):
+            mod.verify_split(self.data, after, self.root, self.fs)
+
+    def test_verify_after_rejects_changed_root_uuid(self):
+        after = self.smaller_capture()
+        after["partitiontable"]["partitions"][-1]["uuid"] = "1B81E7E6-F50D-419B-A739-2AEEF8DA3335"
+        with self.assertRaisesRegex(ValueError, "/dev/sda34"):
+            mod.verify_split(self.data, after, self.root, self.fs)
+
+    def test_verify_after_accepts_only_the_size_change(self):
+        after = self.smaller_capture()
+        self.assertIn("only userdata length changed", mod.verify_split(self.data, after, self.root, self.fs)["mode"])

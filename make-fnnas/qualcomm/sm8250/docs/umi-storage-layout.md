@@ -12,7 +12,18 @@
 | fnOS 系统 `/dev/sda34` (`userdata`) | 2,883,584 | 19,660,799 | 64 GiB |
 | 留给用户存储的尾部 | 19,660,800 | 62,201,850 | 162.28 GiB（格式化前） |
 
-不要在其他型号、容量或分区版本上照抄扇区。用 `collect-boot-evidence.sh` 获取当前挂载、Btrfs `Device size` 和 `sfdisk --json`，将其中 GPT JSON 提取到本地，再用 `python3 plan-umi-storage.py GPT_JSON --root-device ROOT_NODE --btrfs-device-bytes BYTES` 生成预览。规划器不操作块设备，输出不是分区工具的输入文件。
+不要在其他型号、容量或分区版本上照抄扇区。用 `collect-boot-evidence.sh` 获取当前挂载、Btrfs `Device size` 和 `sfdisk --json`，将其中 GPT JSON 提取到本地，再用 `python3 plan-umi-storage.py GPT_JSON --root-device ROOT_NODE --btrfs-device-bytes BYTES` 生成预览。规划器不操作块设备，输出不是分区工具的输入文件。切分后、创建数据卷前，对相同命令加上 `--verify-after AFTER_JSON`，验证 GPT 只有 `userdata` 的长度变化，其他表头和分区均保持一致。
+
+## 离线演练
+
+在有 `losetup`、`sfdisk` 和 `btrfs` 的 Linux 上，可用 `rehearse-umi-storage.py`。脚本在私有临时目录新建稀疏文件，以捕获的 GPT JSON 重建布局并放入经 SHA-256 校验的原生 `rootfs.img`。它只操作自己创建的 loop 设备；不接受真机作为输出。使用实际 `lsblk` 的磁盘字节数，不能把厂商标称容量传给 `--disk-bytes`。
+
+```sh
+sudo python3 rehearse-umi-storage.py GPT_JSON --disk-bytes DISK_BYTES \
+  --root-device ROOT_NODE --rootfs ROOTFS_IMG --rootfs-sha256 ROOTFS_SHA256
+```
+
+2026-11-27 离线演练：真机捕获的 34 项 GPT 在 4 KiB 扇区副本上重建并通过验证；改动仅限 `userdata` 长度，切分后原生 Btrfs 镜像通过 `btrfs check --readonly`，回滚后该副本的主、备 GPT 区域与切分前逐字节一致。此结果不是对真机原始 GPT 的字节备份，也没有验收真机启动、Btrfs 扩容或 fnOS 建卷。
 
 ## 后续实施与验收（尚未在真机执行）
 
@@ -20,3 +31,5 @@
 2. 真机操作后，先确认原根 UUID 可启动、`userdata` 实际只有 64 GiB、分区表前 33 个条目未变；再把 Btrfs 增长到新的分区边界。此时仅使用 64 GiB 的分区增长，不允许自动吞掉整块 UFS。
 3. [飞牛官方《如何创建存储空间？》](https://help.fnnas.com/articles/v1/volume/create) 支持用系统盘剩余空间创建独立存储。本移植环境还没有验过这条路径。先把尾部留作 GPT 未分配空间，观察 fnOS 是否给出专用的「系统盘剩余空间」候选。只有明确核对所选范围是上述尾部，且不会重建主盘分区表或清除系统分区，才另行确认建立数据卷；不要选择 1 GiB/64 MiB 项，也不要把整块 `/dev/sda` 当空盘初始化。
 4. 创建后验收 Web 文件管理、普通用户权限、写入读回以及 Fastboot 往返后的持久性。当前启动曾出现 `/fs` 挂载的 `unknown filesystem type 'trimafs'`，需要确认是否影响 fnOS 的存储和共享功能。如果向导不识别剩余空间或创建失败，先检查日志；可另评估独立数据分区加常规文件系统和文件共享，不把 Linux 能挂载等同于 fnOS 已接管。
+
+划分后 Fastboot 的 `userdata` 容量会变小。后续安装仍应预检该分区容量；禁止使用会重建整盘 GPT 的刷机方式，否则用户数据分区可能丢失。
