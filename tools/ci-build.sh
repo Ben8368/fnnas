@@ -45,6 +45,9 @@ UMI_PATCH_MANIFEST="$work/evidence/armbian-patches.tsv" bash rekernel -b xiaomi-
 kernel_out=$work/kernel/kernel-out
 if [[ $profile == lab-* ]]; then kernel_out=$work/kernel/csot-out; fi
 install -m644 "$kernel_out/kernel-source.tsv" "$work/evidence/kernel-source.tsv"
+if [[ -f $work/kernel/trim-patches.tsv ]]; then
+    install -m644 "$work/kernel/trim-patches.tsv" "$work/evidence/trim-patches.tsv"
+fi
 read -r version _ < "$kernel_out/kernel-source.tsv"
 if [[ $profile != lab-* && $with_debian == true ]]; then
     cp "$work/kernel/kernel-out/.config" "$work/evidence/kernel.config"

@@ -1,5 +1,7 @@
 # Umi ARM64 的 trimafs 兼容性与真机挂载验证
 
+后续已将固定社区补丁及本地 ARM64、默认权限修正接入 Umi 内核构建；每次构建记录逐项摘要并在冲突时停止。本文下述实验记录保留当时的事实。
+
 官方 ARM64 1253 镜像归档 SHA-256 为 `0453f9b98cf1cdc8b710fc7f1b040c73160d10d5f66b131cfaf722226c877066`。其 `6.18.18-trim` 的 System.map 含 `init_trimafs_fs` 的内建 initcall 和权限、目录、ACL 路径；没有在此供体中找到可复制到新内核的 trimafs 模块。`triminit` 执行不带选项的 `mount -t trimafs trimafs /fs`。这里验证的是社区重写能否兼容这条路径，**不是**获得了飞牛官方 ARM64 补丁。
 
 ## 精确输入和构建边界
