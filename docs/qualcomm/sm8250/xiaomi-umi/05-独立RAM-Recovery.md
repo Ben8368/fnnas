@@ -4,7 +4,7 @@
 
 ## 1. 在本地构建
 
-从已验证的原生 fnOS `native` 或获准的 `native-debug` 目录取 `boot.img`，核对其 `SHA256SUMS` 和内核晋级/候选记录。不要使用 Debian 重现镜像或未验证的启动镜像。构建需要 Python 3.11+ 和 Go 1.23+，不需要联网下载 Go 模块，无须连接设备。下面的变量由维护者填写：
+从已验证的原生 fnOS `native` 或获准的 `native-local-debug` / `native-debug` 目录取 `boot.img`，核对其 `SHA256SUMS` 和内核晋级/本地构建/CI 候选记录。不要使用 Debian 重现镜像或未验证的启动镜像。构建需要 Python 3.11+ 和 Go 1.23+，不需要联网下载 Go 模块，无须连接设备。下面的变量由维护者填写：
 
 ```bash
 TOOLS=make-fnnas/qualcomm/sm8250/boot/abl-android-v2/recovery
@@ -13,12 +13,12 @@ BOOT_SHA="<boot.img SHA-256 from the native SHA256SUMS>"
 python3 -B "$TOOLS/build-recovery.py" "$NATIVE/boot.img" ./recovery-ram.img --boot-sha256 "$BOOT_SHA"
 ```
 
-构建器保留输入内核和 DTB 的原始字节，仅更换 initramfs、移除持久根参数，并打印新镜像 SHA-256。留存新镜像摘要、原生 boot 摘要、源码和 Linux 提交、内核配置、CI Run/Attempt 和包摘要。生成的镜像只留本地；对外分发前另做内核和 Go 静态依赖的许可及对应源码审计。
+构建器保留输入内核和 DTB 的原始字节，仅更换 initramfs、移除持久根参数，并打印新镜像 SHA-256。留存新镜像摘要、原生 boot 摘要、源码和 Linux 提交、内核配置和包摘要；仅 CI 来源需保留 Run/Attempt。生成的镜像只留本地；对外分发前另做内核和 Go 静态依赖的许可及对应源码审计。
 
 ## 2. 获准后在真机验证
 
 1. 记录当前可启动系统和基线状态。确认维护者批准这次 RAM 启动、已准备回到原系统，且面板与内核档位匹配。
-2. 从同一台设备只读核对当前活动的原厂 DTBO 及索引。对 **本次 `recovery-ram.img`** 解包后的 `dtb`，按[真机无刷写验收](04-真机无刷写验收.md)运行 `check-installed-dtbo.py --protect-live`。对于 `native-debug` 还需比对构建目录中的 `stock-dtbo.txt`。预检失败就停止，不修改 DTBO 或其他分区。
+2. 从同一台设备只读核对当前活动的原厂 DTBO 及索引。对 **本次 `recovery-ram.img`** 解包后的 `dtb`，按[真机无刷写验收](04-真机无刷写验收.md)运行 `check-installed-dtbo.py --protect-live`。若使用显式 DTBO/index 组装档位，还需比对构建目录中的 `stock-dtbo.txt`。预检失败就停止，不修改 DTBO 或其他分区。
 3. 从原系统进入 Fastboot，记录目标序列号并确认 `fastboot -s "$SERIAL" getvar product` 为 `umi`。复核镜像摘要，只执行 `fastboot -s "$SERIAL" boot ./recovery-ram.img`，**不要执行任何 `fastboot flash`**。
 4. 找到新枚举的 `UMI-RAM-RECOVERY` ACM 端口（Linux `/dev/ttyACM*`、macOS `/dev/cu.usbmodem*`、Windows `COMx`）。不要让串口终端、日志收集器或自动串口探测程序同时占用它。主机 Python 环境需要 `pyserial==3.5`。先发送小的非敏感二进制夹具，再另起一轮测试较大的输入：
 

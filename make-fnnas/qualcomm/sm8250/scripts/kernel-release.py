@@ -11,6 +11,7 @@ import subprocess
 import tarfile
 import tempfile
 from urllib.error import HTTPError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
@@ -97,8 +98,14 @@ def tag_for(version, rate, source):
 
 
 def acceptance_record(record, context):
-    required = {"source_commit", "linux_commit", "profile", "run_id", "run_attempt", "package_sha256"}
-    if any(record[key] != context[key] for key in required):
+    required = {"source_commit", "linux_commit", "profile", "package_sha256"}
+    if context.get("build_origin") == "local":
+        required.add("build_origin")
+        if {"run_id", "run_attempt"} & record.keys():
+            raise ValueError("A local build must not claim a CI run")
+    else:
+        required.update(("run_id", "run_attempt"))
+    if any(record.get(key) != context[key] for key in required):
         raise ValueError("Acceptance does not identify the exact build and package")
     if (record["result"] != "pass" or record["device"] != "xiaomi-umi"
             or record["method"] not in {"fastboot-boot", "native-fastboot-flash"} or record["scope"] != "kernel"
@@ -133,12 +140,15 @@ def describe_release(repo, release, rate, requested):
         return None
     data = json.loads(release["body"])
     version, source = data["version"], data["source_commit"]
-    if (data["schema"] != 1 or data["repository"].casefold() != repo.casefold()
+    ci = (data.get("schema") == 1 and "build_origin" not in data
+          and all(type(data.get(key)) is int and data[key] >= 1 for key in ("run_id", "run_attempt")))
+    local = (data.get("schema") == 2 and data.get("build_origin") == "local"
+             and not ({"run_id", "run_attempt"} & data.keys()))
+    if (not (ci or local) or data["repository"].casefold() != repo.casefold()
             or data["build_repository"] != PUBLISH_REPO or data["branch"] != PUBLISH_BRANCH
             or not re.fullmatch(VERSION, version) or (requested != "auto" and version != requested)
             or not re.fullmatch(SHA, source) or not re.fullmatch(SHA, data["linux_commit"])
             or not re.fullmatch(HASH, data["patches_sha256"]) or PROFILE_RATE.get(data["profile"]) != rate
-            or any(type(data[key]) is not int or data[key] < 1 for key in ("run_id", "run_attempt"))
             or release["tag_name"] != tag_for(version, rate, source)):
         return None
     acceptance_record(data["acceptance"], data)
@@ -299,6 +309,47 @@ def fetch_candidate(args):
         unpacked.rename(output)
 
 
+def open_local_package(args, root, unpacked):
+    """Copy the selected byte stream once, verify it, and extract only known files."""
+    path = args.local_package
+    match = ASSET.fullmatch(path.name)
+    if (path.is_symlink() or not path.is_file() or not match
+            or PROFILE_RATE[args.profile] != match["rate"]
+            or not all(re.fullmatch(pattern, value or "") for pattern, value in
+                       ((SHA, args.source), (SHA, args.linux_commit), (HASH, args.package_sha256)))):
+        raise ValueError("Require a regular local Umi package, pinned source/Linux SHAs, profile and SHA-256")
+    bundle = root / path.name
+    shutil.copyfile(path, bundle)
+    if sha256(bundle) != args.package_sha256:
+        raise ValueError("Local package SHA-256 mismatch")
+    # Match the identity again after safe extraction and verify the patch manifest
+    # and boot checksums, not just the claimed archive filename.
+    with tarfile.open(bundle, "r:gz") as archive:
+        member = archive.getmember("armbian-patches.tsv")
+        if not member.isfile() or member.size > 16 * 1024 * 1024:
+            raise ValueError("Invalid patch manifest in local package")
+        patches_sha = hashlib.sha256(archive.extractfile(member).read()).hexdigest()
+    data = {"source_commit": args.source, "linux_commit": args.linux_commit,
+            "profile": args.profile, "version": match["version"], "patches_sha256": patches_sha,
+            "package_sha256": args.package_sha256, "schema": 2, "build_origin": "local",
+            "build_repository": PUBLISH_REPO, "branch": PUBLISH_BRANCH}
+    unpack_kernel(bundle, match["version"], match["rate"], data, unpacked)
+    return bundle, data
+
+
+def fetch_local(args):
+    output = args.output
+    if output.exists() or output.is_symlink():
+        raise ValueError(f"Output already exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent) as work:
+        root = Path(work)
+        unpacked = root / "kernel-files"
+        _, data = open_local_package(args, root, unpacked)
+        (unpacked / "local-build.json").write_text(json.dumps({**data, "status": "local-debug"}, indent=2) + "\n")
+        unpacked.rename(output)
+
+
 def promote(args):
     if args.publish and gh("api", "user", "--jq", ".login").casefold() != PUBLISH_OPERATOR.casefold():
         raise ValueError("Publication requires the authorized maintainer's local GitHub credential")
@@ -306,14 +357,34 @@ def promote(args):
     destination = args.release_repo or repo
     if not re.fullmatch(r"Ben8368/[A-Za-z0-9_.-]+", destination, re.IGNORECASE):
         raise ValueError("The release target must be a maintainer-owned GitHub repository")
-    destination_data = json.loads(gh("api", f"repos/{destination}"))
-    if destination_data["private"] or destination_data["owner"]["login"].casefold() != PUBLISH_OPERATOR.casefold():
-        raise ValueError("The release catalog must be public and maintainer-owned")
-    destination = destination_data["full_name"]
-    check_run(args)
+    if args.local_package:
+        if args.run_id is not None or args.run_attempt is not None:
+            raise ValueError("Select either a local package or a CI run, not both")
+    else:
+        if args.run_id is None or args.run_attempt is None or args.linux_commit or args.package_sha256:
+            raise ValueError("CI promotion requires --run-id and --run-attempt; local pins require --local-package")
+    if args.publish or not args.local_package:
+        destination_data = json.loads(gh("api", f"repos/{destination}"))
+        if destination_data["private"] or destination_data["owner"]["login"].casefold() != PUBLISH_OPERATOR.casefold():
+            raise ValueError("The release catalog must be public and maintainer-owned")
+        destination = destination_data["full_name"]
+    if not args.local_package:
+        check_run(args)
+    elif args.publish:
+        # Ensure the tested source is published on the maintained branch,
+        # without moving any branch or relying on a workflow run.
+        if not re.fullmatch(SHA, args.source):
+            raise ValueError("Require the full local build source SHA")
+        branch = quote(PUBLISH_BRANCH, safe="")
+        commit = json.loads(gh("api", f"repos/{repo}/compare/{args.source}...{branch}"))
+        if commit["status"] not in {"ahead", "identical"} or commit["merge_base_commit"]["sha"] != args.source:
+            raise ValueError("The local build source is not an ancestor of the maintained branch")
     with tempfile.TemporaryDirectory() as work:
         root = Path(work)
-        bundle, data = download_candidate(args, root)
+        if args.local_package:
+            bundle, data = open_local_package(args, root, root / "kernel-files")
+        else:
+            bundle, data = download_candidate(args, root)
         data["repository"] = destination
         rate = PROFILE_RATE[args.profile]
         version = data["version"]
@@ -379,11 +450,19 @@ def main():
     candidate = commands.add_parser("fetch-candidate", help="verify and unpack one CI build for local debugging")
     candidate.add_argument("output", type=Path)
     candidate.add_argument("--package-sha256", required=True)
-    for request in (promotion, candidate):
+    local = commands.add_parser("fetch-local", help="verify and unpack one locally compiled debug package")
+    local.add_argument("output", type=Path)
+    for request in (promotion, local):
+        local_only = request is local
+        request.add_argument("--local-package", type=Path, required=local_only)
+        request.add_argument("--linux-commit", required=local_only)
+        request.add_argument("--package-sha256", required=local_only)
+    for request in (promotion, candidate, local):
         request.add_argument("--source", required=True)
         request.add_argument("--profile", required=True, choices=PROFILE_RATE)
-        request.add_argument("--run-id", required=True, type=int)
-        request.add_argument("--run-attempt", required=True, type=int)
+    for request in (promotion, candidate):
+        request.add_argument("--run-id", required=request is candidate, type=int)
+        request.add_argument("--run-attempt", required=request is candidate, type=int)
     promotion.add_argument("--acceptance", required=True, type=Path)
     promotion.add_argument("--evidence", required=True, type=Path)
     promotion.add_argument("--release-repo", help="separate public catalog owned by the maintainer")
@@ -392,6 +471,9 @@ def main():
     try:
         if args.command == "fetch-candidate":
             fetch_candidate(args)
+            return
+        if args.command == "fetch-local":
+            fetch_local(args)
             return
         if args.command == "promote":
             promote(args)

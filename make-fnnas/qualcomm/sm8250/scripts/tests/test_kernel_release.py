@@ -38,6 +38,17 @@ class KernelReleaseTests(unittest.TestCase):
                         {**asset(version, rate), "digest": "sha256:" + "d" * 64},
                         {"name": "device-evidence.log", "state": "uploaded", "digest": "sha256:" + "e" * 64}]}
 
+        local = release("6.18.12")
+        local_data = json.loads(local["body"])
+        for entry in (local_data, local_data["acceptance"]):
+            del entry["run_id"], entry["run_attempt"]
+            entry.update(build_origin="local", schema=2)
+        local["body"] = json.dumps(local_data)
+        with patch.object(kernel_release, "release_api", return_value={"object": {"type": "commit", "sha": "a" * 40}}):
+            self.assertEqual(kernel_release.describe_release("owner/repo", local, "60", "auto")[0], "6.18.12")
+            local_data["run_id"] = 10
+            self.assertIsNone(kernel_release.describe_release("owner/repo", {**local, "body": json.dumps(local_data)}, "60", "auto"))
+
         rejected = release("6.18.99")
         rejected["body"] = rejected["body"].replace('"result": "pass"', '"result": "fail"')
         with patch.object(kernel_release, "release_api", side_effect=[
@@ -59,7 +70,8 @@ class KernelReleaseTests(unittest.TestCase):
                  "head_sha": source, "conclusion": "success", "event": "push", "path": p.WORKFLOW,
                  "id": 123, "run_attempt": 2}
         request = SimpleNamespace(source=source, profile="release", run_id=123, run_attempt=2,
-                                  release_repo=None, publish=False)
+                                  release_repo=None, publish=False, local_package=None, linux_commit=None,
+                                  package_sha256=None)
         for name, rejected in {"head_branch": "pr/qualcomm-test", "head_sha": "b" * 40,
                                "run_attempt": 1, "conclusion": "failure", "event": "workflow_dispatch"}.items():
             with self.subTest(name=name), patch.object(p, "gh", side_effect=[json.dumps(destination),
@@ -142,6 +154,42 @@ class KernelReleaseTests(unittest.TestCase):
                 kernel_release.fetch_candidate(candidate)
             self.assertFalse((candidate.output / "promotion.json").exists())
             self.assertEqual(json.loads((candidate.output / "candidate.json").read_text())["status"], "debug-candidate")
+
+            local = SimpleNamespace(output=root / "local", local_package=bundle, profile="csot-90",
+                                    source="f" * 40, linux_commit="a" * 40, package_sha256="0" * 64,
+                                    release_repo=None, publish=False, run_id=None, run_attempt=None)
+            p = kernel_release
+            with patch.object(p, "gh", side_effect=AssertionError("local flow must not call GitHub")):
+                with self.assertRaisesRegex(ValueError, "Local package SHA-256 mismatch"):
+                    p.fetch_local(local)
+                local.package_sha256 = p.sha256(bundle)
+                local.linux_commit = "b" * 40
+                with self.assertRaisesRegex(ValueError, "provenance do not match"):
+                    p.fetch_local(local)
+                self.assertFalse(local.output.exists())
+                local.linux_commit = "a" * 40
+                p.fetch_local(local)
+                record = json.loads((local.output / "local-build.json").read_text())
+                self.assertEqual(record["build_origin"], "local")
+                self.assertEqual(record["status"], "local-debug")
+                self.assertNotIn("run_id", record)
+                local.evidence = root / "device-evidence.log"
+                local.evidence.write_text("\n".join((
+                    f"UMI_PROBE: PID1 kernel={release}", f"UMI_PROBE: artifact_sha256={local.package_sha256}",
+                    "UMI_PROBE_REPORT_END", "Android sys.boot_completed=1")) + "\n")
+                local.acceptance = root / "acceptance.json"
+                acceptance = {**record, "device": "xiaomi-umi", "scope": "kernel", "result": "pass",
+                              "method": "fastboot-boot", "operator": "operator", "tested_at": "date",
+                              "evidence_sha256": p.sha256(local.evidence)}
+                local.acceptance.write_text(json.dumps({**acceptance, "run_id": 123}))
+                with self.assertRaisesRegex(ValueError, "must not claim a CI run"):
+                    p.promote(local)
+                local.acceptance.write_text(json.dumps(acceptance))
+                p.promote(local)  # verify only: local artifacts + actual evidence fields, no CI lookup
+                local.evidence.write_text("missing recovery marker\n")
+                with self.assertRaisesRegex(ValueError, "evidence digest mismatch"):
+                    p.promote(local)
+
 
 
 if __name__ == "__main__":

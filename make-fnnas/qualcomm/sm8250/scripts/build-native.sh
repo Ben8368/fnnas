@@ -3,9 +3,15 @@
 # Offline disk-image assembly only. No partition or device is ever flashed.
 set -euo pipefail
 debug=0
-if [[ ${1:-} == --debug ]]; then debug=1; shift; fi
+local_debug=0
+case ${1:-} in
+    --debug) debug=1; shift ;;
+    --local-debug) debug=1; local_debug=1; shift ;;
+esac
 if [[ ${1:-} == --help || ${1:-} == -h || $# -lt 5 ]]; then
-    if (( debug )); then
+    if (( local_debug )); then
+        echo 'Usage: renas -b xiaomi-umi native-local-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [lineage-latest all | STOCK_DTBO DTBO_INDEX] --local-package PACKAGE --source SHA --linux-commit SHA --profile PROFILE --package-sha256 SHA256'
+    elif (( debug )); then
         echo 'Usage: renas -b xiaomi-umi native-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [lineage-latest all | STOCK_DTBO DTBO_INDEX] --source SHA --profile PROFILE --run-id ID --run-attempt N --package-sha256 SHA256'
     else
         echo 'Usage: renas -b xiaomi-umi native PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [--refresh 60|90] [--version auto|6.18.x] [--repo OWNER/REPO]'
@@ -50,11 +56,27 @@ if (( debug )); then
             exit 2
         fi
     fi
-    "$FNOS_PYTHON" -B "$scripts/kernel-release.py" fetch-candidate "$kernel" "$@"
-    provenance=kernel-candidate.json
+    if (( local_debug )); then
+        "$FNOS_PYTHON" -B "$scripts/kernel-release.py" fetch-local "$kernel" "$@"
+        package_record=local-build.json
+        provenance=kernel-local-build.json
+    else
+        "$FNOS_PYTHON" -B "$scripts/kernel-release.py" fetch-candidate "$kernel" "$@"
+        package_record=candidate.json
+        provenance=kernel-candidate.json
+    fi
 else
     "$FNOS_PYTHON" -B "$scripts/kernel-release.py" fetch "$kernel" "$@"
     provenance=kernel-promotion.json
+fi
+if (( local_debug )); then
+    release=$(< "$kernel/include/config/kernel.release")
+    for module in fs/nfsd/nfsd.ko net/openvswitch/openvswitch.ko; do
+        path=$kernel/lib/modules/$release/kernel/$module
+        magic=$(modinfo -F vermagic "$path")
+        [[ ${magic%% *} == "$release" ]] || { echo "Invalid vermagic for $module" >&2; exit 1; }
+        sha256sum -- "$path"
+    done
 fi
 if (( lineage )); then
     dtbo_index=all
@@ -81,7 +103,7 @@ uuid=$(uuidgen -r | tr '[:upper:]' '[:lower:]')
 bash "$scripts/apply-files.sh" "$staged"
 "$FNOS_PYTHON" -B "$scripts/native-rootfs.py" prepare "$staged" "$report" "$firmware" "$firmware_sha" "$uuid"
 if (( debug )); then
-    install -m644 "$kernel/candidate.json" "$staged/etc/umi-build/$provenance"
+    install -m644 "$kernel/$package_record" "$staged/etc/umi-build/$provenance"
 fi
 if (( lineage )); then
     install -m644 "$scratch/lineage-dtbo.json" "$staged/etc/umi-build/lineage-dtbo.json"
@@ -113,12 +135,14 @@ install -m644 "$scripts/../docs/flash-acceptance.md" "$result/FLASH.md"
 install -m644 "$scripts/collect-boot-evidence.sh" "$result/collect-boot-evidence.sh"
 cp -- "$staged/etc/umi-build/"*.json "$result/"
 mv -- "$report" "$result/base-audit"
-checksum_files=(boot.img rootfs.img FLASH.md collect-boot-evidence.sh)
+checksum_files=(boot.img rootfs.img FLASH.md collect-boot-evidence.sh "$provenance")
 if (( lineage )); then checksum_files+=(dtbo.img lineage-dtbo.json); else checksum_files+=(stock-dtbo.txt); fi
 (cd "$result"; sha256sum "${checksum_files[@]}" > SHA256SUMS)
 mv -Tn -- "$result" "$output"
 [[ ! -e $result ]] || { echo "Output already exists: $output" >&2; exit 1; }
-if (( debug )); then
+if (( local_debug )); then
+    printf 'Local native fnOS debug image pair (local build, static checks only): %s\n' "$output"
+elif (( debug )); then
     printf 'Local native fnOS debug image pair (CI candidate, static checks only): %s\n' "$output"
 else
     printf 'Unaccepted native fnOS image pair (static checks only): %s\n' "$output"

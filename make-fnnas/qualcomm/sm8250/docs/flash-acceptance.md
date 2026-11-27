@@ -1,6 +1,6 @@
 # 小米 10 原生 fnOS 真机验收
 
-`native` 用已晋升的内核，`native-debug` / `native-acceptance` 用已授权且精确锁定的 CI 候选。默认完整包都含 `dtbo.img`、`boot.img`、`rootfs.img`、`lineage-dtbo.json` 和 `SHA256SUMS`。`boot.img`、`rootfs.img` 绑定同一个根 UUID。构建时从 LineageOS 官方 Umi 发布源解析当时最新的 DTBO、验证大小与官方 SHA-256，并用本次装配的 DTB 保护性检查全部 overlay；任一步失败都不出包。构建和 CI 不写真机。
+`native` 用已晋升的内核（可由本地编译或 CI 产出）。`native-local-debug` 用本地编译并精确锁定的内核包；`native-debug` / `native-acceptance` 是可选的 CI 来源。默认完整包都含 `dtbo.img`、`boot.img`、`rootfs.img`、`lineage-dtbo.json` 和 `SHA256SUMS`。`boot.img`、`rootfs.img` 绑定同一个根 UUID。构建时从 LineageOS 官方 Umi 发布源解析当时最新的 DTBO、验证大小与官方 SHA-256，并用本次装配的 DTB 保护性检查全部 overlay；任一步失败都不出包。构建和 CI 不写真机。
 
 ## 安装前
 
@@ -34,6 +34,6 @@ PowerShell 可逐步执行相同命令（用 `$serial` 保存序列号）；每�
 
 - **首启与 USB。** 电脑应同时发现 NCM 网卡和 ACM 串口。串口不用输入即可捕获完整 `UMI_BOOTLOG/1` 摘要，不应有 getty 或 shell。记录内核、根文件系统、DTBO 活动索引及 USB 地址。摘要中的 `dtbo_sha256=unavailable` 表示运行时未取得读回摘要；单独保留已验证的随包摘要和 Fastboot 写入证据，不冒充读回，也不把该值当成串口失效。USB DHCP 应分配 `172.16.42.2/24`，不下发默认网关或 DNS。在 <http://172.16.42.1:5666> 创建管理员账号并登录。仅 DHCP 失败时，在已识别的 USB 网卡上临时手配地址并单独记录。
 - **日志与存储。** 如果容量异常或出现报错，先不要重启、初始化、扩容或改分区。网页登录后的事件日志和 USB 摘要都不能代替内核与系统 journal。通过本地 USB 网络上的 SSH 登录管理员会话，用 `sudo bash collect-boot-evidence.sh 0` 将**完整内核 journal、系统 journal、dmesg、warning 以上日志、失败服务和只读 GPT**收集到电脑。`-1` 或 Boot ID 可选择保留的历史启动；块设备、dmesg 和服务状态始终是采集当时的现场。保留 boot ID、设备时间和单调启动时间；看到 `[collection failed: …]` 要核对具体缺失段。若系统没有启动到 journald/SSH，使用恢复路径检查已有的 pstore/持久 journal，不把缺失日志当成没有错误。对照块设备与分区容量、SCSI LUN、根挂载、Btrfs 实际容量和向导候选；匹配型号不能证明小容量设备可安全用作数据盘。只在获准使用、已核对节点的独立测试盘上做读写。原始日志留在本地，外发前审查并脱敏。
-- **重启与恢复。** 从已安装的 fnOS 请求进入 Fastboot，确认目标设备成功枚举，再重启回同一套 fnOS 并复查登录和存储。保留启动日志、镜像摘要及 CI Run ID、Attempt、源提交和 Linux 提交。分别记录内核、fnOS 用户态和 OTA 的实际验收结果。
+- **重启与恢复。** 从已安装的 fnOS 请求进入 Fastboot，确认目标设备成功枚举，再重启回同一套 fnOS 并复查登录和存储。保留启动日志、镜像与内核包摘要、源提交和 Linux 提交；只有使用 CI 时才记录 Run ID 与 Attempt。分别记录内核、fnOS 用户态和 OTA 的实际验收结果。
 
 系统盘容量划分参见源代码树中的 `make-fnnas/qualcomm/sm8250/docs/umi-storage-layout.md`，刷机和镜像组装都不执行这项操作。
