@@ -29,14 +29,13 @@ if [[ ! $source_sha =~ ^[0-9a-f]{40}$ ||
 fi
 
 inputs=${2:-${XDG_CONFIG_HOME:-$HOME/.config}/fnnas/umi-acceptance}
-for file in firmware.tar firmware.sha256 stock-dtbo.img dtbo-index; do
+for file in firmware.tar firmware.sha256; do
     [[ -f $inputs/$file ]] || { echo "Missing acceptance input: $inputs/$file" >&2; exit 2; }
 done
 inputs=$(realpath -e -- "$inputs")
 firmware_sha=$(< "$inputs/firmware.sha256")
-dtbo_index=$(< "$inputs/dtbo-index")
-if [[ ! $firmware_sha =~ ^[0-9a-f]{64}$ || ! $dtbo_index =~ ^(0|[1-9][0-9]*)$ ]]; then
-    echo 'firmware.sha256 must contain the trusted digest alone, and dtbo-index must contain the stock overlay index alone.' >&2
+if [[ ! $firmware_sha =~ ^[0-9a-f]{64}$ ]]; then
+    echo 'firmware.sha256 must contain the trusted digest alone.' >&2
     exit 2
 fi
 output=${3:-out/umi-fnos-$profile-$run_id-$attempt}
@@ -55,7 +54,7 @@ fi
 printf '%s  %s\n' "$umi_boot_donor_sha256" "$boot" | sha256sum -c -
 
 args=(--debug "$base" "$boot" "$inputs/firmware.tar" "$firmware_sha" "$output"
-    "$inputs/stock-dtbo.img" "$dtbo_index" --source "$source_sha" --profile "$profile"
+    lineage-latest all --source "$source_sha" --profile "$profile"
     --run-id "$run_id" --run-attempt "$attempt" --package-sha256 "$package_sha")
 if (( EUID == 0 )); then
     bash "$scripts/build-native.sh" "${args[@]}"

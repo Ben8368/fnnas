@@ -8,7 +8,7 @@ minimum=5
 if (( debug )); then minimum=7; fi
 if [[ ${1:-} == --help || ${1:-} == -h || $# -lt $minimum ]]; then
     if (( debug )); then
-        echo 'Usage: renas -b xiaomi-umi native-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR STOCK_DTBO DTBO_INDEX --source SHA --profile PROFILE --run-id ID --run-attempt N --package-sha256 SHA256'
+        echo 'Usage: renas -b xiaomi-umi native-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR {STOCK_DTBO DTBO_INDEX | lineage-latest all} --source SHA --profile PROFILE --run-id ID --run-attempt N --package-sha256 SHA256'
     else
         echo 'Usage: renas -b xiaomi-umi native PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [--refresh 60|90] [--version auto|6.18.x] [--repo OWNER/REPO]'
     fi
@@ -34,16 +34,25 @@ scratch=$(mktemp -d -- "$parent/.umi-native.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 mkdir -- "$scratch/staged"
 kernel=$scratch/kernel
+lineage=0
 if (( debug )); then
-    dtbo=$(realpath -e -- "$1")
+    dtbo=$1
     dtbo_index=$2
     shift 2
+    if [[ $dtbo == lineage-latest && $dtbo_index == all ]]; then
+        lineage=1
+        "$FNOS_PYTHON" -B "$scripts/lineage-dtbo.py" "$scratch"
+    elif [[ $dtbo_index =~ ^(0|[1-9][0-9]*)$ && $dtbo != lineage-latest ]]; then
+        # Preserve the explicit historical readback mode. Check the exact bytes staged.
+        cp -- "$(realpath -e -- "$dtbo")" "$scratch/dtbo.img"
+    else
+        echo 'Select either lineage-latest all or a local DTBO and numeric active index.' >&2
+        exit 2
+    fi
     "$FNOS_PYTHON" -B "$scripts/kernel-release.py" fetch-candidate "$kernel" "$@"
-    # Bind validation and the recorded digest to the same local copy.
-    cp -- "$dtbo" "$scratch/stock-dtbo.img"
     "$FNOS_PYTHON" -B "$scripts/../boot/abl-android-v2/tools/check-installed-dtbo.py" \
-        "$scratch/stock-dtbo.img" "$dtbo_index" "$kernel/boot-csot.dtb" --protect-live
-    dtbo_sha=$(sha256sum < "$scratch/stock-dtbo.img")
+        "$scratch/dtbo.img" "$dtbo_index" "$kernel/boot-csot.dtb" --protect-live
+    dtbo_sha=$(sha256sum < "$scratch/dtbo.img")
     dtbo_sha=${dtbo_sha%% *}
     provenance=kernel-candidate.json
 else
@@ -69,7 +78,11 @@ bash "$scripts/apply-files.sh" "$staged"
 "$FNOS_PYTHON" -B "$scripts/native-rootfs.py" prepare "$staged" "$report" "$firmware" "$firmware_sha" "$uuid"
 if (( debug )); then
     install -m644 "$kernel/candidate.json" "$staged/etc/umi-build/$provenance"
-    printf 'dtbo_index=%s\ndtbo_sha256=%s\n' "$dtbo_index" "$dtbo_sha" > "$staged/etc/umi-build/stock-dtbo.txt"
+    if (( lineage )); then
+        install -m644 "$scratch/lineage-dtbo.json" "$staged/etc/umi-build/lineage-dtbo.json"
+    else
+        printf 'dtbo_index=%s\ndtbo_sha256=%s\n' "$dtbo_index" "$dtbo_sha" > "$staged/etc/umi-build/stock-dtbo.txt"
+    fi
 fi
 result=$scratch/output
 mkdir -- "$result"
@@ -84,14 +97,20 @@ bash "$scripts/assemble-rootfs.sh" "$staged" btrfs "$uuid" "$result/rootfs.img"
 UMI_NATIVE_BTRFS=1 bash "$scripts/verify-release.sh" "$result/boot.img" "$result/rootfs.img" "$kernel"
 "$FNOS_PYTHON" -B "$scripts/native-rootfs.py" verify "$result/rootfs.img" "$kernel" "$uuid" | tee "$result/rootfs-verify.log"
 if (( debug )); then
-    cp -- "$staged/etc/umi-build/stock-dtbo.txt" "$result/"
+    if (( lineage )); then
+        cp -- "$scratch/dtbo.img" "$result/"
+    else
+        cp -- "$staged/etc/umi-build/stock-dtbo.txt" "$result/"
+    fi
     install -m644 "$scripts/../docs/flash-acceptance.md" "$result/FLASH.md"
 else
     cp -- "$kernel/promotion.json" "$result/$provenance"
 fi
 cp -- "$staged/etc/umi-build/"*.json "$result/"
 mv -- "$report" "$result/base-audit"
-(cd "$result"; sha256sum boot.img rootfs.img > SHA256SUMS)
+checksum_files=(boot.img rootfs.img)
+if (( lineage )); then checksum_files+=(dtbo.img lineage-dtbo.json); fi
+(cd "$result"; sha256sum "${checksum_files[@]}" > SHA256SUMS)
 mv -Tn -- "$result" "$output"
 [[ ! -e $result ]] || { echo "Output already exists: $output" >&2; exit 1; }
 if (( debug )); then

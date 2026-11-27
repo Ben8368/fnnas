@@ -1,23 +1,27 @@
 # 小米 10 原生 fnOS 真机验收
 
-本目录的 `boot.img` 对应 `boot`，`rootfs.img` 是直接写入 `userdata` 的 Btrfs 文件系统镜像。两者使用同一个根文件系统 UUID，须成对使用。`kernel-candidate.json` 记录源码、Linux 提交、CI Run/Attempt 和包摘要。`stock-dtbo.txt` 记录构建时通过检查的原厂 DTBO 摘要和活动索引。
+本目录的 `boot.img` 和 `rootfs.img` 必须成对使用：两者绑定同一根 UUID，分别写入 `boot` 与 `userdata`。`kernel-candidate.json` 记录内核来源。默认构建还附有 LineageOS 官方 Umi 的 `dtbo.img` 和出处 `lineage-dtbo.json`，本次构建已对镜像的**每个** overlay 跑过保护性校验。旧的显式读回方式仅输出 `stock-dtbo.txt`。
 
 ## 安装前
 
-1. 确认设备为已解锁的小米 10（Umi）CSOT，已经备份现有数据并准备了该机的恢复方案。写入 `userdata` 会覆盖原系统和数据。安装须经设备维护者确认。
-2. 确认该设备当前活动的原厂 DTBO 与 `stock-dtbo.txt` 一致。用从同一设备读回的 DTBO 核对摘要，并核对活动索引。安装只写 `boot` 和 `userdata`。
-3. 在镜像目录核对文件摘要。Linux 用 `sha256sum -c SHA256SUMS`，macOS 用 `shasum -a 256 -c SHA256SUMS`。使用新版 Android Platform Tools，将 `SERIAL` 设为 `fastboot devices` 显示的目标设备序列号。
+1. 确认为已解锁的小米 10（Umi）CSOT，已有该机的恢复方案和必要备份，并获得本次写入授权。写入 `userdata` 会覆盖原系统与数据。
+2. `sha256sum -c SHA256SUMS`（macOS 可用 `shasum -a 256 -c SHA256SUMS`），并核对 `lineage-dtbo.json` 中的机型、发布日期、大小和官方摘要。镜像组装时解析当时最新的官方版本；不要在刷写时擅自换成没经过本次配对检查的 DTBO。
+3. 在 Fastboot 确认 `product=umi`、已解锁且目标唯一。比较 `boot`、`userdata` 和 `dtbo` 的分区容量与镜像大小。将 `SERIAL` 设为目标的 Fastboot 序列号。
 
 ```bash
 fastboot -s "$SERIAL" getvar product
+fastboot -s "$SERIAL" getvar unlocked
+fastboot -s "$SERIAL" getvar partition-size:dtbo
 fastboot -s "$SERIAL" getvar partition-size:boot
 fastboot -s "$SERIAL" getvar partition-size:userdata
 wc -c boot.img rootfs.img
 ```
 
-确认 `product` 为 `umi`，并确认两个镜像的字节数分别小于或等于对应的分区大小。Fastboot 的分区大小通常以十六进制显示。
+## 写入并启动（无需 RAM 探针）
 
-## 写入并启动
+- **已确认现有 DTBO 相容**：保留 `dtbo`，只写下面的 `userdata` 和 `boot`。旧的 `stock-dtbo.txt` 路径仍需核对已安装的摘要和活动索引。
+- **DTBO 缺失，或维护者明确授权用官方 DTBO 建立已知基线**：先核对随镜像附带的 `dtbo.img` 容量和摘要，然后执行 `fastboot -s "$SERIAL" flash dtbo dtbo.img`。只有明确成功才继续。此路径不需要事先读活动索引，因为构建时已校验了表的全部条目。
+- **Fastboot 不支持读回**不等于 DTBO 缺失；若无法确认当前 DTBO 又未获准覆盖，不要猜测或继续刷写。不要刷 LineageOS 的 `boot.img`、`recovery.img` 或 `vbmeta.img`。
 
 ```bash
 fastboot -s "$SERIAL" flash userdata rootfs.img &&

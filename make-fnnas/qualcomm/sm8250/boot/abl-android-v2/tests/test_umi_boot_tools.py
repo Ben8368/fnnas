@@ -96,6 +96,30 @@ class DtboTableTests(unittest.TestCase):
                 check.extract_entry(data, index)
 
     @unittest.skipUnless(shutil.which("dtc"), "requires device-tree-compiler")
+    def test_all_entries_rejects_an_unsafe_later_overlay(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base, overlay, table = (Path(tmp) / name for name in ("base.dtb", "overlay.dtbo", "table.img"))
+            dts = '/dts-v1/; / { abl_ovf { status = "disabled"; sink: sink {}; }; live: live {}; };'
+            subprocess.run(["dtc", "-q", "-@", "-o", base], input=dts, text=True, check=True)
+            entries = []
+            for target in ("sink", "live"):
+                dts = f"/dts-v1/; /plugin/; &{target} {{ marker = <1>; }};"
+                subprocess.run(["dtc", "-q", "-@", "-o", overlay], input=dts, text=True, check=True)
+                entries.append(overlay.read_bytes())
+            offset = 96
+            header = struct.pack(">8I", check.DT_TABLE_MAGIC, offset + sum(map(len, entries)), 32, 32, 2, 32, 4096, 0)
+            for entry in entries:
+                header += struct.pack(">8I", len(entry), offset, 0, 0, 0, 0, 0, 0)
+                offset += len(entry)
+            table.write_bytes(header + b"".join(entries))
+            cmd = [sys.executable, check.__file__, table]
+            subprocess.run(cmd + ["0", base, "--protect-live"], check=True, capture_output=True)
+            result = subprocess.run(cmd + ["all", base, "--protect-live"], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("index 1", result.stderr)
+            self.assertIn("overlay modified the live hardware tree", result.stderr)
+
+    @unittest.skipUnless(shutil.which("dtc"), "requires device-tree-compiler")
     def test_live_protection_checks_overlay_targets_and_quarantine_status(self):
         base_dts = """/dts-v1/; / {
             display: display { status = "okay"; };
