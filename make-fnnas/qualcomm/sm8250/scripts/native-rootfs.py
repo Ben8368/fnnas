@@ -49,6 +49,70 @@ DONOR_HOOKS = ("etc/kernel/postinst.d/10-sync-dtb", "etc/kernel/postinst.d/15-up
                "etc/initramfs/post-update.d/zz-update-uinitrd")
 STAGING_MODES = {"/": 0o755, "/etc": 0o755, "/usr": 0o755, "/root": 0o700}
 
+# These are Umi adaptations of the pinned donor. Keep its enablement and
+# adjust only the hardware or runtime prerequisite that was found missing.
+NATIVE_SERVICE_POLICY = {
+    "etc/systemd/system/led-set.service": (
+        "/usr/trim/bin/system_setled.sh", "[Unit]\nConditionPathExists=/boot/board.json\n"),
+    "etc/systemd/system/set_gpio-init.service": (
+        "/usr/trim/bin/system_setgpio.sh", "[Unit]\nConditionPathExists=/boot/board.json\n"),
+    "usr/lib/systemd/system/nut-server.service": (
+        "/sbin/upsd -F", "[Service]\n"
+        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver) exit 0;; *) exit 1;; esac'\n"),
+    "usr/lib/systemd/system/nut-monitor.service": (
+        "/sbin/upsmon -F", "[Service]\n"
+        "ExecCondition=/bin/sh -c 'case \"$${MODE:-none}\" in standalone|netserver|netclient) exit 0;; *) exit 1;; esac'\n"),
+    # No supported SMART devices is normal on the internal UFS. Leave the
+    # scan and actionable errors enabled, including those on external disks.
+    "usr/lib/systemd/system/smartmontools.service": (
+        "/usr/sbin/smartd -n $smartd_opts", "[Service]\nExecStart=\nExecStart=/usr/sbin/smartd -n -q errors,nodev0 $smartd_opts\n"),
+    "etc/systemd/system/trim_trashbind.service": (
+        "/usr/trim/bin/trashbind", "[Unit]\nConditionPathIsMountPoint=/fs\n"),
+    # Do not substitute another libupnp SONAME or the system libc. The
+    # loader checks the real ABI before these optional vendor programs run.
+    "etc/systemd/system/upnp.service": (
+        "/usr/trim/bin/upnp_service", "[Service]\nExecCondition=/lib/ld-linux-aarch64.so.1 --list /usr/trim/bin/upnp_service\n"),
+    "etc/systemd/system/trim_raid_check.service": (
+        "/usr/trim/bin/check_raid456_resync_status",
+        "[Service]\nExecCondition=/lib/ld-linux-aarch64.so.1 --list /usr/trim/bin/check_raid456_resync_status\n"),
+}
+EXIM_TMPFILES = "etc/tmpfiles.d/90-umi-exim.conf"
+# Debian exim4-base.postinst creates this directory; the donor archive omits it.
+EXIM_LOG_POLICY = "d /var/log/exim4 2750 Debian-exim adm -\n"
+
+
+def service_dropin(path):
+    return f"etc/systemd/system/{Path(path).name}.d/90-umi-compat.conf"
+
+
+def apply_native_service_policy(root):
+    for path, (command, dropin) in NATIVE_SERVICE_POLICY.items():
+        unit = inside(root, path)
+        if (unit.is_symlink() or not unit.is_file() or
+                [line for line in unit.read_text().splitlines() if line.startswith("ExecStart=")]
+                != [f"ExecStart={command}"]):
+            raise ValueError(f"Donor service changed; review before adapting {path}")
+        if Path(path).name in {"nut-server.service", "nut-monitor.service"} and (
+                "EnvironmentFile=-/etc/nut/nut.conf" not in unit.read_text().splitlines()):
+            raise ValueError(f"Donor NUT environment changed: {path}")
+        if unit.stat().st_mode & 0o111:
+            # Replace, not chmod through a hardlinked sibling in the donor.
+            replace_file(unit, unit.read_text())
+            unit.chmod(0o644)
+        target = inside(root, service_dropin(path))
+        target.parent.mkdir(exist_ok=True)
+        with target.open("x", encoding="utf-8") as stream:
+            stream.write(dropin)
+        target.chmod(0o644)
+    for path, name in (("etc/passwd", "Debian-exim"), ("etc/group", "adm")):
+        if not any(line.partition(":")[0] == name for line in inside(root, path).read_text().splitlines()):
+            raise ValueError(f"Donor account missing: {name}")
+    tmpfiles = inside(root, EXIM_TMPFILES)
+    tmpfiles.parent.mkdir(exist_ok=True)
+    with tmpfiles.open("x", encoding="utf-8") as stream:
+        stream.write(EXIM_LOG_POLICY)
+    tmpfiles.chmod(0o644)
+
 
 def inside(root, name):
     path = root / name
@@ -183,6 +247,7 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
             path.unlink()
         path.symlink_to("/dev/null")
     fix_donor_boot_services(root, system)
+    apply_native_service_policy(root)
     for name, mode in CONSOLE_FILES.items():
         path = inside(root, name)
         if not path.is_file() or path.is_symlink():
@@ -269,6 +334,15 @@ def verify(image, kernel, uuid):
                         or guest.cat(f"/{WSD_DROPIN}") != WSD_CONFIG or not guest.is_file(f"/{WSD_DAEMON}")
                         or not guest.statns(f"/{WSD_DAEMON}")["st_mode"] & 0o111):
                     raise ValueError("Donor getty or wsdd2 correction was not preserved")
+                for path, (_, contents) in NATIVE_SERVICE_POLICY.items():
+                    dropin = f"/{service_dropin(path)}"
+                    if (guest.is_symlink(dropin) or guest.cat(dropin) != contents
+                            or guest.statns(dropin)["st_mode"] & 0o7777 != 0o644
+                            or guest.statns(f"/{path}")["st_mode"] & 0o111):
+                        raise ValueError(f"Umi service compatibility policy missing: {path}")
+                if (guest.is_symlink(f"/{EXIM_TMPFILES}") or guest.cat(f"/{EXIM_TMPFILES}") != EXIM_LOG_POLICY
+                        or guest.statns(f"/{EXIM_TMPFILES}")["st_mode"] & 0o7777 != 0o644):
+                    raise ValueError("Exim log directory policy was not preserved")
                 for name, mode in CONSOLE_FILES.items():
                     if not guest.is_file(f"/{name}") or (guest.statns(f"/{name}")["st_mode"] & 0o7777) != mode:
                         raise ValueError(f"Umi console file missing or wrong mode: {name}")

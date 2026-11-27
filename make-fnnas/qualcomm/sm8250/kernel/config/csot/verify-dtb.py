@@ -32,6 +32,17 @@ def require(condition, context):
 
 require(refresh in ('60', '90'), 'refresh selector')
 require(get('/', 'model') == 'Xiaomi Mi 10 (CSOT)', 'panel variant')
+if not lab:
+    bluetooth = '/soc@0/geniqup@9c0000/serial@998000/bluetooth'
+    pmu = '/qca6390-pmu'
+    require(get(bluetooth, 'compatible') == 'qcom,qca6390-bt', 'Bluetooth remains enabled')
+    require(not {'pinctrl-0', 'pinctrl-names', 'enable-gpios', 'swctrl-gpios'} & set(properties(bluetooth)),
+            'Bluetooth must not claim the PMU pins')
+    require(get(pmu, 'bt-enable-gpios', 'u').split()[-2:] == ['21', '0'], 'PMU must retain BT_EN')
+    for name, ldo in zip(('rfacmn', 'aon', 'btcmx', 'rfa0p8', 'rfa1p2', 'rfa1p7'), (0, 1, 4, 5, 6, 7)):
+        require(get(bluetooth, f'vdd{name}-supply', 'u') == phandle(f'{pmu}/regulators/ldo{ldo}'),
+                f'Bluetooth PMU vdd{name} supply')
+    require(get('/soc@0/pinctrl@33c0000', 'status') == 'disabled', 'unsupported ADSP clock consumer')
 if lab:
     port = node('pm8150b_typec') + '/connector'
     require(get(port, 'power-role') == 'sink' and get(port, 'data-role') == 'device', 'USB roles')

@@ -25,6 +25,28 @@
 	status = "disabled";
 };
 
+/* The LPI controller itself cannot probe without the same ADSP clocks. */
+&{/soc@0/pinctrl@33c0000} {
+	status = "disabled";
+};
+
+/* The PMU already owns BT_EN. Link the Bluetooth consumer to the exact
+ * donor PMU supplies so hci_qca can find its power sequencer, without
+ * taking the PMU's GPIO pinctrl state a second time.
+ */
+&{/soc@0/geniqup@9c0000/serial@998000/bluetooth} {
+	/delete-property/ pinctrl-names;
+	/delete-property/ pinctrl-0;
+	/delete-property/ enable-gpios;
+	/delete-property/ swctrl-gpios;
+	vddrfacmn-supply = <&{/qca6390-pmu/regulators/ldo0}>;
+	vddaon-supply = <&{/qca6390-pmu/regulators/ldo1}>;
+	vddbtcmx-supply = <&{/qca6390-pmu/regulators/ldo4}>;
+	vddrfa0p8-supply = <&{/qca6390-pmu/regulators/ldo5}>;
+	vddrfa1p2-supply = <&{/qca6390-pmu/regulators/ldo6}>;
+	vddrfa1p7-supply = <&{/qca6390-pmu/regulators/ldo7}>;
+};
+
 /* This GPI-only serial engine's sole client is the unsupported FTS
  * touchscreen. Leave the shared DMA controller and other I2C buses alone.
  */

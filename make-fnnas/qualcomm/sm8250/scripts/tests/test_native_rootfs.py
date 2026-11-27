@@ -38,6 +38,12 @@ class NativeRootfsTests(unittest.TestCase):
             donor_getty_want = root / native.DONOR_GETTY_WANT
             donor_getty_want.parent.mkdir(parents=True, exist_ok=True)
             donor_getty_want.symlink_to("/lib/systemd/system/serial-getty@.service")
+            for path, (command, _) in native.NATIVE_SERVICE_POLICY.items():
+                unit = root / path
+                unit.write_text(f"[Service]\nExecStart={command}\nEnvironmentFile=-/etc/nut/nut.conf\n")
+                unit.chmod(0o755)
+            (root / "etc/passwd").write_text("Debian-exim:x:106:117::/var/spool/exim4:/usr/sbin/nologin\n")
+            (root / "etc/group").write_text("adm:x:4:\n")
             wsdd2 = root / native.WSD_DAEMON
             wsdd2.touch(mode=0o755)
             (root / native.WSD_UNIT).write_text("[Service]\nExecStart=/usr/trim/bin/wsdd2 -4\n")
@@ -79,6 +85,12 @@ class NativeRootfsTests(unittest.TestCase):
             self.assertFalse(donor_getty_want.is_symlink())
             self.assertEqual((root / "etc/systemd/system" / native.DONOR_GETTY).readlink(), Path("/dev/null"))
             self.assertEqual((root / native.WSD_DROPIN).read_text(), native.WSD_CONFIG)
+            for path, (command, dropin) in native.NATIVE_SERVICE_POLICY.items():
+                unit = root / path
+                self.assertIn(f"ExecStart={command}\n", unit.read_text())
+                self.assertEqual(unit.stat().st_mode & 0o111, 0)
+                self.assertEqual((root / native.service_dropin(path)).read_text(), dropin)
+            self.assertEqual((root / native.EXIM_TMPFILES).read_text(), native.EXIM_LOG_POLICY)
             self.assertIn("ExecStart=/usr/trim/bin/wsdd2 -4", (root / native.WSD_UNIT).read_text())
             self.assertFalse((root / "etc/systemd/system/serial-getty@.service").is_symlink())
             for name, mode in native.CONSOLE_FILES.items():
