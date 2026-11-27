@@ -23,7 +23,7 @@ func TestReceive(t *testing.T) {
 	for _, data := range [][]byte{nil, bytes.Repeat([]byte{0, 10, 13, 17, 19, 255}, 16000)} {
 		input := fmt.Appendf(nil, "%s HASH %s %d\n", protocol, nonce, len(data))
 		var output bytes.Buffer
-		if err := receive(peer{bytes.NewReader(append(input, data...)), &output}, baseDigest); err != nil {
+		if err := receive(peer{bytes.NewReader(append(input, data...)), &output}, baseDigest, nil); err != nil {
 			t.Fatal(err)
 		}
 		want := fmt.Sprintf("%s READY %s %s\n%s RESULT %s %d %x\n", protocol, nonce, baseDigest,
@@ -41,12 +41,12 @@ func TestReject(t *testing.T) {
 		fmt.Sprintf("%s HASH %s %d\n", protocol, nonce, maxPayload+1),
 	} {
 		var output bytes.Buffer
-		if err := receive(peer{strings.NewReader(bad), &output}, baseDigest); err == nil || output.Len() != 0 {
+		if err := receive(peer{strings.NewReader(bad), &output}, baseDigest, nil); err == nil || output.Len() != 0 {
 			t.Fatalf("request %q not rejected: %q, %v", bad, &output, err)
 		}
 	}
 	var output bytes.Buffer
-	if err := receive(peer{strings.NewReader(protocol + " HASH " + nonce + " 3\na"), &output}, baseDigest); err == nil ||
+	if err := receive(peer{strings.NewReader(protocol + " HASH " + nonce + " 3\na"), &output}, baseDigest, nil); err == nil ||
 		strings.Contains(output.String(), " RESULT ") {
 		t.Fatalf("short input yielded a receipt: %q, %v", &output, err)
 	}

@@ -121,11 +121,11 @@ func run() error {
 	if !bound {
 		return fmt.Errorf("no available USB device controller")
 	}
-	log("ACM ready; waiting for one read-only input transaction")
-	if err := receive(tty, digest); err != nil {
+	log("ACM ready; waiting for one hash-only or read-only GPT transaction")
+	if err := receive(tty, digest, umiGPTInventory); err != nil {
 		return err
 	}
-	log("input received and discarded; SHA-256 receipt sent")
+	log("transaction completed; no persistent writes")
 	idle() // Keep ttyGS0 open until the deadline, including pending USB writes.
 	return nil
 }

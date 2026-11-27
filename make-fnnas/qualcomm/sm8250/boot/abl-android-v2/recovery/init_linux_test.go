@@ -15,7 +15,7 @@ func TestStdioPeer(t *testing.T) {
 	if err := setRaw(os.Stdin); err != nil {
 		t.Fatal(err)
 	}
-	if err := receive(peer{os.Stdin, os.Stdout}, baseDigest); err != nil {
+	if err := receive(peer{os.Stdin, os.Stdout}, baseDigest, nil); err != nil {
 		t.Fatal(err)
 	}
 }

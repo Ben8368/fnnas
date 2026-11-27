@@ -43,7 +43,7 @@ def assemble(base, init, expected):
 
 def build_init(path):
     subprocess.run(["go", "build", "-trimpath", "-ldflags=-s -w -buildid=", "-o", str(path),
-                    "init_linux.go", "protocol.go"], cwd=HERE, check=True, env={
+                    "init_linux.go", "protocol.go", "storage_linux.go"], cwd=HERE, check=True, env={
         **os.environ, "CGO_ENABLED": "0", "GOOS": "linux", "GOARCH": "arm64", "GOARM64": "v8.0",
         "GOTOOLCHAIN": "local", "GOENV": "off", "GOFLAGS": "", "GOWORK": "off",
     })

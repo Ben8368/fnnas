@@ -30,13 +30,21 @@ func isHex(s string, size int) bool {
 
 // One request per boot. The payload is hashed and discarded; it is never
 // interpreted, decompressed, saved, mounted, or passed to another process.
-func receive(rw io.ReadWriter, bootDigest string) error {
+func receive(rw io.ReadWriter, bootDigest string, inventory func() (string, error)) error {
 	reader := bufio.NewReaderSize(rw, 128)
 	line, err := reader.ReadSlice('\n')
 	if err != nil {
 		return fmt.Errorf("request: %w", err)
 	}
 	fields := strings.Split(string(line[:len(line)-1]), " ")
+	if len(fields) == 3 && fields[0] == protocol && fields[1] == "GPT" && isHex(fields[2], 32) && inventory != nil {
+		facts, err := inventory()
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(rw, "%s GPT-RESULT %s %s %s\n", protocol, fields[2], bootDigest, facts)
+		return err
+	}
 	if len(fields) != 4 || fields[0] != protocol || fields[1] != "HASH" || !isHex(fields[2], 32) {
 		return errors.New("bad request header")
 	}

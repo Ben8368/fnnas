@@ -93,6 +93,23 @@ class TransferTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.transfer(FakeSerial(self.ready()), size=host.MAX_PAYLOAD + 1)
 
+    def test_read_only_gpt_matches_verified_raw_backups(self):
+        class Port(FakeSerial):
+            def read_until(self, terminator, size):
+                return self.read(size)
+
+        primary, backup = "c" * 64, "d" * 64
+        response = b" ".join((host.PROTOCOL, b"GPT-RESULT", NONCE, BASE.encode(), b"sda",
+                              b"254778802176", b"4096", b"ram-only", primary.encode(), backup.encode())) + b"\n"
+        port = Port(response)
+        result = host.verify_gpt(port, BASE, primary, backup, nonce=NONCE)
+        self.assertEqual(result["device"], "/dev/sda")
+        self.assertEqual(port.tx, b" ".join((host.PROTOCOL, b"GPT", NONCE)) + b"\n")
+        for bad in (response[:-1], response.replace(backup.encode(), b"e"*64),
+                    response.replace(b"ram-only", b"root-mounted"), response.replace(b"4096", b"512")):
+            with self.assertRaisesRegex(OSError, "do not match"):
+                host.verify_gpt(Port(bad), BASE, primary, backup, nonce=NONCE)
+
     @unittest.skipUnless(os.environ.get("UMI_RECOVERY_PEER"), "requires cross-built ARM64 PTY peer")
     def test_host_to_arm64_over_pty(self):
         import pty
