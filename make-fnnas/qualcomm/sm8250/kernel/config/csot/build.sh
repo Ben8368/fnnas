@@ -46,6 +46,30 @@ fi
 printf '%s\n' "$linux_rev" > linux/.display-source-revision
 export ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-}
 python3 "$here/stage.py" "$work"
+if [[ $out == kernel-out ]]; then
+    trim="$here/../../../sources/trim-community-6e24d881/patches/kernel"
+    manifest="$work/trim-patches.tsv"
+    : > "$manifest"
+    while IFS= read -r patch || [[ -n $patch ]]; do
+        [[ -z $patch || $patch == \#* ]] && continue
+        [[ $patch =~ ^[A-Za-z0-9._+-]+\.patch$ && -f $trim/$patch ]] || {
+            echo "Invalid trim patch: $patch" >&2; exit 1;
+        }
+        digest=$(sha256sum "$trim/$patch"); digest=${digest%% *}
+        if git -C linux apply --whitespace=nowarn "$trim/$patch"; then
+            printf '%s\t%s\tapplied\n' "$patch" "$digest" >> "$manifest"
+        else
+            printf '%s\t%s\tconflict\n' "$patch" "$digest" >> "$manifest"
+            exit 1
+        fi
+    done < "$trim/series"
+    fix="$here/../../../sources/trimafs-vm-arm64.patch"
+    digest=$(sha256sum "$fix"); digest=${digest%% *}
+    git -C linux apply --whitespace=nowarn "$fix" || {
+        printf '%s\t%s\tconflict\n' "${fix##*/}" "$digest" >> "$manifest"; exit 1;
+    }
+    printf '%s\t%s\tapplied\n' "${fix##*/}" "$digest" >> "$manifest"
+fi
 linux/scripts/kconfig/merge_config.sh -m -O "$out" main-boot/kernel.config "${fragments[@]}"
 make -C linux O="$work/$out" olddefconfig
 for frag in "${fragments[@]}"; do
