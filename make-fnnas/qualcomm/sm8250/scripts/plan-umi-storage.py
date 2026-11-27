@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Preview a Umi 64 GiB userdata / user data split from a captured GPT; never write a device."""
+import argparse
+import json
+from pathlib import Path
+import sys
+from uuid import UUID
+
+
+SYSTEM_BYTES = 64 * 1024**3
+ALIGN_BYTES = 1024**2
+
+
+def natural(value, field, minimum=1):
+    if type(value) is not int or value < minimum:
+        raise ValueError(f"invalid {field}: expected integer >= {minimum}")
+    return value
+
+
+def plan(capture, root_device, filesystem_bytes):
+    table = capture["partitiontable"]
+    if table["label"] != "gpt" or table["unit"] != "sectors":
+        raise ValueError("expected an sfdisk GPT capture in sectors")
+    sector = natural(table["sectorsize"], "sectorsize")
+    if sector not in (512, 4096):
+        raise ValueError("unexpected Umi GPT sector size")
+    first = natural(table["firstlba"], "firstlba")
+    end = natural(table["lastlba"], "lastlba") + 1
+    parts = sorted(table["partitions"], key=lambda p: natural(p["start"], "partition start"))
+    if not parts or parts[-1].get("name") != "userdata" or parts[-1]["node"] != root_device:
+        raise ValueError("the mounted root must be the last partition and named userdata")
+    if sum(p.get("name") == "userdata" for p in parts) != 1:
+        raise ValueError("ambiguous userdata partition")
+    previous_end = first
+    for p in parts:
+        start = p["start"]
+        if start < previous_end:
+            raise ValueError("overlapping or out-of-range GPT entries")
+        previous_end = start + natural(p["size"], "partition size")
+        if previous_end > end:
+            raise ValueError("partition extends past the usable GPT range")
+    if previous_end != end:
+        raise ValueError("unexpected free tail after userdata; review the layout manually")
+    root = parts[-1]
+    UUID(root["uuid"])
+    UUID(root["type"])
+    filesystem_bytes = natural(filesystem_bytes, "Btrfs device size")
+    if not filesystem_bytes < SYSTEM_BYTES:
+        raise ValueError("the existing Btrfs device must be smaller than 64 GiB")
+    data_start = root["start"] + SYSTEM_BYTES // sector
+    if data_start * sector % ALIGN_BYTES:
+        raise ValueError("the 64 GiB boundary is not 1 MiB aligned")
+    if data_start >= end:
+        raise ValueError("no user-data space remains after reserving 64 GiB")
+    return {
+        "mode": "read-only plan; not an sfdisk input file",
+        "device": table["device"],
+        "sector_bytes": sector,
+        "unchanged_partitions": len(parts) - 1,
+        "system": {
+            "node": root["node"], "name": root["name"], "partuuid": root["uuid"],
+            "type": root["type"], "start_lba": root["start"], "end_lba_inclusive": data_start - 1,
+            "bytes": SYSTEM_BYTES, "current_btrfs_device_bytes": filesystem_bytes,
+        },
+        "unallocated_tail_for_user_storage": {
+            "start_lba": data_start, "end_lba_inclusive": end - 1, "bytes": (end - data_start) * sector,
+        },
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("gpt_capture", type=Path)
+    parser.add_argument("--root-device", required=True, help="mounted root block device from findmnt")
+    parser.add_argument("--btrfs-device-bytes", type=int, required=True, help="Device size from Btrfs usage")
+    args = parser.parse_args()
+    try:
+        data = json.loads(args.gpt_capture.read_text(encoding="utf-8"))
+        print(json.dumps(plan(data, args.root_device, args.btrfs_device_bytes), indent=2))
+    except (OSError, AttributeError, KeyError, TypeError, ValueError) as exc:
+        print(f"Refusing to plan: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
