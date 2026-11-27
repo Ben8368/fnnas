@@ -9,6 +9,15 @@ import threading
 import time
 
 
+def classify_port(port):
+    identity = port.vid, port.pid, (port.serial_number or "").lower()
+    if identity == (0x1D6B, 0x0104, "umi-acm"):
+        return port.device, True  # older serial-login image
+    if identity in {(0x1D6B, 0x0103, "umi-log"), (0x1D6B, 0x0104, "umi-log")}:
+        return port.device, False  # diagnostics only
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, help="raw receive log; USB events go to OUTPUT.events")
@@ -24,9 +33,7 @@ def main():
         parser.exit(1, "Install pyserial with python -m pip install pyserial\n")
 
     def find_ports():
-        return [port.device for port in list_ports.comports()
-                if (port.vid, port.pid) == (0x1D6B, 0x0104)
-                and (port.serial_number or "").lower() == "umi-acm"]
+        return list(filter(None, map(classify_port, list_ports.comports())))
 
     console = Console() if args.interactive else None
     stop = threading.Event()
@@ -73,7 +80,7 @@ def main():
                     event("Waiting for Umi USB ACM" if not ports else "Multiple Umi ports present; waiting")
                     stop.wait(0.5)
                     continue
-                port, = ports
+                (port, accepts_input), = ports
                 try:
                     link = serial.Serial(baudrate=115200, timeout=0.25, write_timeout=0.5)
                     link.port = port
@@ -84,8 +91,8 @@ def main():
                     stop.wait(0.5)
                     continue
                 with connection_lock:
-                    connection = link
-                event(f"Connected {port}")
+                    connection = link if accepts_input else None
+                event(f"Connected {port}" + (" (read-only boot diagnostics)" if not accepts_input else ""))
                 try:
                     check_port_at = time.monotonic() + 1
                     while not stop.is_set():
@@ -99,7 +106,7 @@ def main():
                             if console is not None:
                                 console.write_bytes(data)
                         if time.monotonic() >= check_port_at:
-                            if port not in find_ports():
+                            if (port, accepts_input) not in find_ports():
                                 event(f"Disconnected {port}")
                                 break
                             check_port_at = time.monotonic() + 1

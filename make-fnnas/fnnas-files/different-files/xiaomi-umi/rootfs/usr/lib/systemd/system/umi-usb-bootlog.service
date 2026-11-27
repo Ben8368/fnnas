@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Unit]
+Description=Xiaomi Mi 10 read-only USB boot diagnostics
+Requires=umi-usb-acm.service
+After=umi-usb-acm.service systemd-journald.service
+PartOf=umi-usb-acm.service
+ConditionPathExists=/dev/ttyGS0
+
+[Service]
+ExecStart=/usr/local/sbin/umi-usb-bootlog
+StandardInput=null
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectSystem=strict
+PrivateTmp=yes

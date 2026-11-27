@@ -1,0 +1,15 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+set -euo pipefail
+
+name=/sys/kernel/config/usb_gadget/umi-acm/functions/ncm.usb0/ifname
+[[ -r $name && $(< "$name") == umiusb0 && -d /sys/class/net/umiusb0 ]] || exit 1
+ip -4 address replace 172.16.42.1/24 brd + dev umiusb0
+ip link set dev umiusb0 up
+
+# This is an isolated setup link, not a router or DNS server. Never read the
+# vendor/host dnsmasq configuration and never listen on another interface.
+exec /usr/sbin/dnsmasq --conf-file=/dev/null --pid-file= --keep-in-foreground --port=0 \
+	--interface=umiusb0 --except-interface=lo --bind-interfaces \
+	--dhcp-range=172.16.42.2,172.16.42.2,255.255.255.0,10m \
+	--dhcp-option=3 --dhcp-option=6 --leasefile-ro --quiet-dhcp

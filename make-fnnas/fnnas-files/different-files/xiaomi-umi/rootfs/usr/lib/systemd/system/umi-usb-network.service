@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Unit]
+Description=Xiaomi Mi 10 fnOS USB setup link and isolated DHCP
+Requires=umi-usb-acm.service
+After=umi-usb-acm.service
+PartOf=umi-usb-acm.service
+ConditionPathExists=/sys/kernel/config/usb_gadget/umi-acm/functions/ncm.usb0/ifname
+
+[Service]
+ExecStart=/usr/local/sbin/umi-usb-network
+Restart=on-failure
+RestartSec=5s

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+[Match]
+OriginalName=umiusb0
+
+[Link]
+NamePolicy=keep
+Name=umiusb0

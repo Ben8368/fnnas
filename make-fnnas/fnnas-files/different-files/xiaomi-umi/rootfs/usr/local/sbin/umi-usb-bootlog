@@ -1,0 +1,73 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Expose only fixed diagnostics. Do not read from the ACM endpoint, expose a
+# shell, or emit raw journal messages, cmdlines, service logs or identifiers.
+set -euo pipefail
+
+safe_boot_fields() {
+	local entry idx=unavailable panel=unavailable
+	local -a boot_args=()
+	# Only select these exact keys; never send the full ABL command line.
+	read -r -a boot_args || true
+	for entry in "${boot_args[@]}"; do
+		if [[ $entry =~ ^androidboot\.dtbo_idx=([0-9]{1,3})$ ]]; then idx=${BASH_REMATCH[1]}; fi
+		if [[ $entry =~ ^androidboot\.oled_panel_id=([0-9A-Fa-f]{2})$ ]]; then panel=${BASH_REMATCH[1]}; fi
+	done
+	printf 'dtbo_index=%s\npanel_id=%s\n' "$idx" "$panel"
+}
+
+dtbo_digest() {
+	local part=/dev/disk/by-partlabel/dtbo n sum
+	[[ -b $part ]] || return 1
+	n=$(blockdev --getsize64 -- "$part") && [[ $n == 33554432 ]] || return 1
+	sum=$(timeout -k 1 6 sha256sum < "$part") || return 1
+	[[ $sum =~ ^([a-f0-9]{64})[[:space:]]+-$ ]] || return 1
+	printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+service_state() {
+	local unit=$1 state
+	state=$(timeout 1 systemctl show --value -p ActiveState -- "$unit" 2>/dev/null) || state=unavailable
+	case $state in active|inactive|failed|activating|deactivating|reloading) ;; *) state=unavailable ;; esac
+	printf '%s=%s\n' "$unit" "$state"
+}
+
+snapshot() {
+	local kernel root warnings unit
+	kernel=$(uname -r)
+	[[ $kernel =~ ^[a-zA-Z0-9._+-]{1,80}$ ]] || kernel=unavailable
+	root=$(findmnt -n -o FSTYPE --target /) || root=unavailable
+	case $root in btrfs|ext4) ;; *) root=unavailable ;; esac
+	printf 'UMI_BOOTLOG/1 BEGIN\nkernel=%s\nrootfs=%s\n%s\ndtbo_sha256=%s\n' \
+		"$kernel" "$root" "$boot_fields" "${dtbo:-unavailable}"
+	if ip -o -4 address show dev umiusb0 2>/dev/null | grep -F ' 172.16.42.1/24 ' >/dev/null; then
+		printf 'setup_ipv4=172.16.42.1/24\n'
+	else
+		printf 'setup_ipv4=unavailable\n'
+	fi
+	for unit in umi-usb-acm.service umi-usb-network.service trim_init.service trim_nginx.service usersrv.service; do
+		service_state "$unit"
+	done
+	# Keep useful diagnostics without exposing raw device paths or messages.
+	if warnings=$(timeout 3 journalctl --boot --dmesg --priority=warning --no-pager --quiet -o cat -n 120 |
+		awk '{ s=tolower($0); n++; if(s~/usb|dwc3|udc/) u++; if(s~/btrfs|ufs|ufshc/) f++; if(s~/dsi|drm|panel/) d++ } END { printf "%d usb=%d storage=%d display=%d", n,u,f,d }'); then
+		printf 'recent_kernel_warnings=%s\n' "$warnings"
+	else
+		printf 'recent_kernel_warnings=unavailable\n'
+	fi
+	printf 'UMI_BOOTLOG/1 END\n'
+}
+
+main() {
+	timeout -k 1 2 stty -F /dev/ttyGS0 raw -echo clocal -opost
+	boot_fields=$(safe_boot_fields </proc/cmdline)
+	while [[ -c /dev/ttyGS0 ]]; do
+		# Bind each frame to a fresh, read-only digest of the shipped DTBO partition.
+		dtbo=$(dtbo_digest) || dtbo=
+		# A disconnected or slow USB host must not block diagnostics or the boot.
+		snapshot | sed 's/$/\r/' | timeout -k 1 2 tee /dev/ttyGS0 >/dev/null || true
+		sleep 10
+	done
+}
+
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then main; fi

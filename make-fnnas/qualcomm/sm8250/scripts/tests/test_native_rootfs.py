@@ -29,6 +29,12 @@ class NativeRootfsTests(unittest.TestCase):
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((overlay / name).read_bytes())
+            legacy_rule = root / native.LEGACY_USB_GETTY_RULE
+            legacy_rule.parent.mkdir(parents=True, exist_ok=True)
+            legacy_rule.write_bytes((overlay / native.LEGACY_USB_GETTY_RULE).read_bytes())
+            dnsmasq = root / "usr/sbin/dnsmasq"
+            dnsmasq.parent.mkdir(parents=True)
+            dnsmasq.touch(mode=0o755)
             pstore_link = root / native.PSTORE_LINK
             pstore_link.parent.mkdir()
             pstore_link.symlink_to("/lib/systemd/system/systemd-pstore.service")
@@ -62,6 +68,11 @@ class NativeRootfsTests(unittest.TestCase):
             self.assertEqual((root / "etc/systemd/system/resize-rootfs.service").readlink(), Path("/dev/null"))
             self.assertEqual((root / "etc/systemd/system/multi-user.target.wants/umi-usb-acm.service").readlink(),
                              Path("/usr/lib/systemd/system/umi-usb-acm.service"))
+            self.assertEqual((root / native.USB_GETTY_MASK).readlink(), Path("/dev/null"))
+            self.assertFalse(legacy_rule.exists())
+            self.assertFalse((root / "etc/systemd/system/serial-getty@.service").is_symlink())
+            for name, mode in native.CONSOLE_FILES.items():
+                self.assertEqual((root / name).stat().st_mode & 0o777, mode)
             self.assertEqual((root / "usr/local/sbin/umi-serial-console").stat().st_mode & 0o777, 0o755)
             self.assertEqual((root / "usr/local/sbin/umi-power").stat().st_mode & 0o777, 0o755)
             self.assertIn("Storage=persistent", (root / "etc/systemd/journald.conf.d/90-umi-boot-log.conf").read_text())

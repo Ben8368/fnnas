@@ -18,12 +18,19 @@ REQUIRED_FIRMWARE = {"qcom/sm8250/a650_zap.mbn", "qcom/a650_gmu.bin", "qcom/a650
 FSTAB = "UUID={uuid} / btrfs defaults,noatime,compress=zstd:1,subvolid=5 0 1\ntmpfs /tmp tmpfs defaults,nosuid 0 0\n"
 UPDATE_MASKS = ("apt-daily.timer", "apt-daily-upgrade.timer", "apt-daily-upgrade.service", "resize-rootfs.service")
 USB_ACM_UNIT = "umi-usb-acm.service"
+USB_GETTY_MASK = "etc/systemd/system/serial-getty@ttyGS0.service"
+LEGACY_USB_GETTY_RULE = "etc/udev/rules.d/99-umi-serial.rules"
 CONSOLE_FILES = {
     f"usr/lib/systemd/system/{USB_ACM_UNIT}": 0o644,
     "usr/local/sbin/umi-usb-acm": 0o755,
+    "usr/local/sbin/umi-usb-network": 0o755,
+    "usr/local/sbin/umi-usb-bootlog": 0o755,
+    "usr/lib/systemd/system/umi-usb-network.service": 0o644,
+    "usr/lib/systemd/system/umi-usb-bootlog.service": 0o644,
+    "etc/NetworkManager/conf.d/90-umi-usb-setup.conf": 0o644,
+    "etc/systemd/network/10-umi-usb-setup.link": 0o644,
     "usr/local/sbin/umi-serial-console": 0o755,
     "usr/local/sbin/umi-power": 0o755,
-    "etc/udev/rules.d/99-umi-serial.rules": 0o644,
     "etc/systemd/system/serial-getty@ttyGS0.service.d/50-umi-console.conf": 0o644,
     "etc/systemd/journald.conf.d/90-umi-boot-log.conf": 0o644,
     "etc/systemd/pstore.conf.d/90-umi-boot-log.conf": 0o644,
@@ -150,6 +157,21 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
         if not path.is_file() or path.is_symlink():
             raise ValueError(f"Umi console file is missing from the board overlay: {name}")
         path.chmod(mode)
+    dnsmasq = inside(root, "usr/sbin/dnsmasq")
+    if not dnsmasq.is_file() or (dnsmasq.stat().st_mode & 0o111) == 0:
+        raise ValueError("The pinned donor must provide dnsmasq-base for isolated USB DHCP")
+    # The board overlay's enrolment getty is for the legacy Debian image only.
+    # Drop its udev trigger and mask only this tty, not other consoles.
+    rule = Path(LEGACY_USB_GETTY_RULE)
+    (inside(root, rule.parent) / rule.name).unlink(missing_ok=True)
+    getty_path = Path(USB_GETTY_MASK)
+    getty = inside(root, getty_path.parent) / getty_path.name
+    if getty.is_symlink() and getty.readlink() == Path("/dev/null"):
+        pass
+    elif getty.exists() or getty.is_symlink():
+        raise ValueError("Unexpected pre-existing Umi USB getty instance")
+    else:
+        getty.symlink_to("/dev/null")
     pstore_link = inside(root, PSTORE_LINK.parent) / PSTORE_LINK.name
     if not pstore_link.is_symlink() or pstore_link.readlink() != Path(PSTORE_UNIT):
         raise ValueError("The pinned donor must enable systemd-pstore")
@@ -205,7 +227,12 @@ def verify(image, kernel, uuid):
                         != f"/usr/lib/systemd/system/{USB_ACM_UNIT}"
                         or guest.readlink(f"/{PSTORE_LINK}") != PSTORE_UNIT
                         or not guest.is_file(PSTORE_UNIT)):
-                    raise ValueError("Umi USB ACM or systemd-pstore service is not enabled")
+                    raise ValueError("Umi USB setup or systemd-pstore service is not enabled")
+                if (guest.readlink(f"/{USB_GETTY_MASK}") != "/dev/null"
+                        or guest.exists(f"/{LEGACY_USB_GETTY_RULE}")
+                        or not guest.is_file("/usr/sbin/dnsmasq")
+                        or not guest.statns("/usr/sbin/dnsmasq")["st_mode"] & 0o111):
+                    raise ValueError("Umi read-only USB setup or DHCP dependency is missing")
                 for name, mode in CONSOLE_FILES.items():
                     if not guest.is_file(f"/{name}") or (guest.statns(f"/{name}")["st_mode"] & 0o7777) != mode:
                         raise ValueError(f"Umi console file missing or wrong mode: {name}")
