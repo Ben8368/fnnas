@@ -8,9 +8,14 @@ case ${1:-} in
     --debug) debug=1; shift ;;
     --local-debug) debug=1; local_debug=1; shift ;;
 esac
+# A locally built package is an ordinary native image input. Keep the old
+# option as an alias for existing callers, without a separate image workflow.
+for arg in "$@"; do
+    if [[ $arg == --local-package ]]; then debug=1; local_debug=1; fi
+done
 if [[ ${1:-} == --help || ${1:-} == -h || $# -lt 5 ]]; then
     if (( local_debug )); then
-        echo 'Usage: renas -b xiaomi-umi native-local-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [lineage-latest all | STOCK_DTBO DTBO_INDEX] --local-package PACKAGE --source SHA --linux-commit SHA --profile PROFILE --package-sha256 SHA256'
+        echo 'Usage: renas -b xiaomi-umi native PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [lineage-latest all | STOCK_DTBO DTBO_INDEX] --local-package PACKAGE --source SHA --linux-commit SHA --profile PROFILE --package-sha256 SHA256'
     elif (( debug )); then
         echo 'Usage: renas -b xiaomi-umi native-debug PINNED_BASE_OR_DASH MAIN_BOOT_IMG FIRMWARE_TAR FIRMWARE_SHA256 NEW_OUTPUT_DIR [lineage-latest all | STOCK_DTBO DTBO_INDEX] --source SHA --profile PROFILE --run-id ID --run-attempt N --package-sha256 SHA256'
     else
@@ -145,7 +150,7 @@ if (( lineage )); then checksum_files+=(dtbo.img lineage-dtbo.json); else checks
 mv -Tn -- "$result" "$output"
 [[ ! -e $result ]] || { echo "Output already exists: $output" >&2; exit 1; }
 if (( local_debug )); then
-    printf 'Local native fnOS debug image pair (local build, static checks only): %s\n' "$output"
+    printf 'Native fnOS image pair (local build): %s\n' "$output"
 elif (( debug )); then
     printf 'Local native fnOS debug image pair (CI candidate, static checks only): %s\n' "$output"
 else

@@ -1,6 +1,6 @@
 # 小米 10 原生 fnOS 真机验收
 
-`native` 用已晋升的内核（可由本地编译或 CI 产出）。`native-local-debug` 用本地编译并精确锁定的内核包；`native-debug` / `native-acceptance` 是可选的 CI 来源。默认完整包都含 `dtbo.img`、`boot.img`、`rootfs.img`、`lineage-dtbo.json` 和 `SHA256SUMS`。`boot.img`、`rootfs.img` 绑定同一个根 UUID。构建时从 LineageOS 官方 Umi 发布源解析当时最新的 DTBO、验证大小与官方 SHA-256，并用本次装配的 DTB 保护性检查全部 overlay；任一步失败都不出包。构建和 CI 不写真机。
+`native` 可直接使用本地编译并锁定来源和摘要的内核包，也可使用 CI 产物。默认完整包含 `dtbo.img`、`boot.img`、`rootfs.img`、`lineage-dtbo.json` 和 `SHA256SUMS`。`boot.img`、`rootfs.img` 绑定同一个根 UUID。构建时从 LineageOS 官方 Umi 发布源解析当时最新的 DTBO、验证大小与官方 SHA-256，并用本次装配的 DTB 保护性检查全部 overlay；任一步失败都不出包。构建和 CI 不写真机。
 
 ## 安装前
 
