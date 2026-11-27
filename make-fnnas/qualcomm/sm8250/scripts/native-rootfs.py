@@ -19,6 +19,12 @@ FSTAB = "UUID={uuid} / btrfs defaults,noatime,compress=zstd:1,subvolid=5 0 1\ntm
 UPDATE_MASKS = ("apt-daily.timer", "apt-daily-upgrade.timer", "apt-daily-upgrade.service", "resize-rootfs.service")
 USB_ACM_UNIT = "umi-usb-acm.service"
 USB_GETTY_MASK = "etc/systemd/system/serial-getty@ttyGS0.service"
+DONOR_GETTY = "serial-getty@ttyAMA0.service"
+DONOR_GETTY_WANT = Path(f"etc/systemd/system/getty.target.wants/{DONOR_GETTY}")
+WSD_UNIT = "etc/systemd/system/wsdd2.service"
+WSD_DAEMON = "usr/sbin/wsdd2"
+WSD_DROPIN = Path(f"{WSD_UNIT}.d/90-umi-donor-path.conf")
+WSD_CONFIG = "[Service]\nExecStart=\nExecStart=/usr/sbin/wsdd2 -4\n"
 LEGACY_USB_GETTY_RULE = "etc/udev/rules.d/99-umi-serial.rules"
 CONSOLE_FILES = {
     f"usr/lib/systemd/system/{USB_ACM_UNIT}": 0o644,
@@ -28,6 +34,7 @@ CONSOLE_FILES = {
     "usr/lib/systemd/system/umi-usb-network.service": 0o644,
     "usr/lib/systemd/system/umi-usb-bootlog.service": 0o644,
     "etc/NetworkManager/conf.d/90-umi-usb-setup.conf": 0o644,
+    "etc/udev/rules.d/80-umi-csot-backlight.rules": 0o644,
     "etc/systemd/network/10-umi-usb-setup.link": 0o644,
     "usr/local/sbin/umi-serial-console": 0o755,
     "usr/local/sbin/umi-power": 0o755,
@@ -100,6 +107,29 @@ def install_firmware(root, filename, expected):
     replace_file(stash / "firmware.json", json.dumps({"archive_sha256": expected, "files": manifest}, indent=2) + "\n")
 
 
+def fix_donor_boot_services(root, system):
+    want = inside(root, DONOR_GETTY_WANT.parent) / DONOR_GETTY_WANT.name
+    if not want.is_symlink() or want.readlink() != Path("/lib/systemd/system/serial-getty@.service"):
+        raise ValueError("Donor serial-getty enablement changed; review ttyAMA0 before porting")
+    mask = system / DONOR_GETTY
+    if mask.exists() or mask.is_symlink():
+        raise ValueError("Unexpected donor ttyAMA0 override")
+    unit = inside(root, WSD_UNIT)
+    daemon = inside(root, WSD_DAEMON)
+    if (not unit.is_file() or unit.is_symlink() or
+            [line for line in unit.read_text().splitlines() if line.startswith("ExecStart=")]
+            != ["ExecStart=/usr/trim/bin/wsdd2 -4"] or not daemon.is_file() or daemon.is_symlink()
+            or not daemon.stat().st_mode & 0o111):
+        raise ValueError("Donor wsdd2 service or installed executable changed; review before porting")
+    dropin_dir = inside(root, WSD_DROPIN.parent)
+    dropin_dir.mkdir(exist_ok=True)
+    with (dropin_dir / WSD_DROPIN.name).open("x", encoding="utf-8") as stream:
+        stream.write(WSD_CONFIG)
+    (dropin_dir / WSD_DROPIN.name).chmod(0o644)
+    want.unlink()
+    mask.symlink_to("/dev/null")
+
+
 def prepare(root, report, firmware, firmware_sha256, uuid):
     layout = json.loads((report / "partitions.json").read_text())
     info = json.loads((report / "image-info.json").read_text())
@@ -152,6 +182,7 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
         if path.exists() or path.is_symlink():
             path.unlink()
         path.symlink_to("/dev/null")
+    fix_donor_boot_services(root, system)
     for name, mode in CONSOLE_FILES.items():
         path = inside(root, name)
         if not path.is_file() or path.is_symlink():
@@ -192,7 +223,8 @@ def prepare(root, report, firmware, firmware_sha256, uuid):
     install_firmware(root, firmware, firmware_sha256)
     policy = {"removed_donor_module_versions": info["rootfs"]["kernel_module_versions"],
               "original_fstab": original, "corrected_modes": mode_changes,
-              "masked_units": UPDATE_MASKS, "disabled_donor_hooks": disabled_hooks, "apt_pinned_packages": held,
+              "masked_units": (*UPDATE_MASKS, DONOR_GETTY), "disabled_donor_hooks": disabled_hooks,
+              "donor_wsdd2_exec": f"/{WSD_DAEMON} -4", "apt_pinned_packages": held,
               "ota": "vendor OTA unverified; do not run upgrades on Umi"}
     replace_file(inside(root, "etc/umi-build") / "rootfs-policy.json", json.dumps(policy, indent=2) + "\n")
 
@@ -220,7 +252,7 @@ def verify(image, kernel, uuid):
                 for name in DONOR_HOOKS:
                     if guest.is_file(f"/{name}") and (guest.statns(f"/{name}")["st_mode"] & 0o111):
                         raise ValueError(f"Incompatible donor boot hook is still executable: {name}")
-                for unit in UPDATE_MASKS:
+                for unit in (*UPDATE_MASKS, DONOR_GETTY):
                     if guest.readlink(f"/etc/systemd/system/{unit}") != "/dev/null":
                         raise ValueError(f"Update mask lost: {unit}")
                 if (guest.readlink(f"/etc/systemd/system/multi-user.target.wants/{USB_ACM_UNIT}")
@@ -233,6 +265,10 @@ def verify(image, kernel, uuid):
                         or not guest.is_file("/usr/sbin/dnsmasq")
                         or not guest.statns("/usr/sbin/dnsmasq")["st_mode"] & 0o111):
                     raise ValueError("Umi read-only USB setup or DHCP dependency is missing")
+                if (guest.is_symlink(f"/{DONOR_GETTY_WANT}") or guest.exists(f"/{DONOR_GETTY_WANT}")
+                        or guest.cat(f"/{WSD_DROPIN}") != WSD_CONFIG or not guest.is_file(f"/{WSD_DAEMON}")
+                        or not guest.statns(f"/{WSD_DAEMON}")["st_mode"] & 0o111):
+                    raise ValueError("Donor getty or wsdd2 correction was not preserved")
                 for name, mode in CONSOLE_FILES.items():
                     if not guest.is_file(f"/{name}") or (guest.statns(f"/{name}")["st_mode"] & 0o7777) != mode:
                         raise ValueError(f"Umi console file missing or wrong mode: {name}")

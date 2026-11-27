@@ -35,6 +35,12 @@ class NativeRootfsTests(unittest.TestCase):
             dnsmasq = root / "usr/sbin/dnsmasq"
             dnsmasq.parent.mkdir(parents=True)
             dnsmasq.touch(mode=0o755)
+            donor_getty_want = root / native.DONOR_GETTY_WANT
+            donor_getty_want.parent.mkdir(parents=True, exist_ok=True)
+            donor_getty_want.symlink_to("/lib/systemd/system/serial-getty@.service")
+            wsdd2 = root / native.WSD_DAEMON
+            wsdd2.touch(mode=0o755)
+            (root / native.WSD_UNIT).write_text("[Service]\nExecStart=/usr/trim/bin/wsdd2 -4\n")
             pstore_link = root / native.PSTORE_LINK
             pstore_link.parent.mkdir()
             pstore_link.symlink_to("/lib/systemd/system/systemd-pstore.service")
@@ -70,6 +76,10 @@ class NativeRootfsTests(unittest.TestCase):
                              Path("/usr/lib/systemd/system/umi-usb-acm.service"))
             self.assertEqual((root / native.USB_GETTY_MASK).readlink(), Path("/dev/null"))
             self.assertFalse(legacy_rule.exists())
+            self.assertFalse(donor_getty_want.is_symlink())
+            self.assertEqual((root / "etc/systemd/system" / native.DONOR_GETTY).readlink(), Path("/dev/null"))
+            self.assertEqual((root / native.WSD_DROPIN).read_text(), native.WSD_CONFIG)
+            self.assertIn("ExecStart=/usr/trim/bin/wsdd2 -4", (root / native.WSD_UNIT).read_text())
             self.assertFalse((root / "etc/systemd/system/serial-getty@.service").is_symlink())
             for name, mode in native.CONSOLE_FILES.items():
                 self.assertEqual((root / name).stat().st_mode & 0o777, mode)

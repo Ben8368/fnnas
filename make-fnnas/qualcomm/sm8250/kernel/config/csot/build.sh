@@ -40,7 +40,7 @@ if [[ $out == csot-out ]]; then
     fragments+=("$here"/[1-4]0-*.config)
     if [[ $rx_profile != off ]]; then fragments+=("$fragments_rx"); fi
 else
-    fragments+=("$here/release-hardware.config")
+    fragments+=("$here/release-hardware.config" "$here/release-nas.config")
 fi
 (cd display-inputs; python3 -B -m unittest tests.test_native_display.NativePanelTests.test_commands_fail_closed_reset_and_zero_brightness)
 printf '%s\n' "$linux_rev" > linux/.display-source-revision

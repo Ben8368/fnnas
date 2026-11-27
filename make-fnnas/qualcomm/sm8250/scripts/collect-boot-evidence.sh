@@ -53,6 +53,7 @@ section 'Block devices (bytes) and SCSI addresses' lsblk --json --bytes -o NAME,
 section 'Root mount' findmnt -n --notruncate -o SOURCE,TARGET,FSTYPE,OPTIONS --target /
 section 'Root filesystem capacity (bytes)' df -B1 -T -- /
 section 'Btrfs capacity (bytes)' btrfs filesystem usage -b /
+section 'Kernel registered filesystems' cat /proc/filesystems
 section 'Btrfs device counters (not reset)' btrfs device stats /
 section 'Root disk partition table (read-only)' root_gpt
 section 'Clock status' timedatectl status
