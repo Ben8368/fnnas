@@ -88,7 +88,10 @@ else:
     require(get('/soc@0/gpu@3d00000/zap-shader', 'firmware-name') == 'qcom/sm8250/a650_zap.mbn',
             'Adreno early ZAP firmware path')
     for path in ('/sound', '/soc@0/codec@3370000', '/soc@0/soundwire@3210000',
-                 '/soc@0/soundwire@3230000', '/soc@0/geniqup@ac0000/i2c@a94000'):
+                 '/soc@0/soundwire@3230000', '/soc@0/geniqup@ac0000/i2c@a94000',
+                 '/audio-codec',
+                 '/soc@0/geniqup@9c0000/i2c@98c000/speaker-amp@40',
+                 '/soc@0/geniqup@9c0000/i2c@98c000/speaker-amp@42'):
         require(get(path, 'status') == 'disabled', path)
 fb = node('framebuffer')
 require('status' not in properties(fb) or get(fb, 'status') == 'okay', 'framebuffer hand-off')

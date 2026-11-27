@@ -30,6 +30,23 @@
 	status = "disabled";
 };
 
+/* The donor also leaves the WCD938x codec and both CS35L41 speaker
+ * amplifiers enabled.  They are part of the same unsupported audio chain:
+ * without a sound card they only log missing supplies, MBHC thresholds and
+ * the shared-reset warning.  Keep them from probing in release images.
+ */
+&{/audio-codec} {
+	status = "disabled";
+};
+
+&{/soc@0/geniqup@9c0000/i2c@98c000/speaker-amp@40} {
+	status = "disabled";
+};
+
+&{/soc@0/geniqup@9c0000/i2c@98c000/speaker-amp@42} {
+	status = "disabled";
+};
+
 /* The PMU already owns BT_EN. Link the Bluetooth consumer to the exact
  * donor PMU supplies so hci_qca can find its power sequencer, without
  * taking the PMU's GPIO pinctrl state a second time.

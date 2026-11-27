@@ -1,0 +1,92 @@
+Subject: [PATCH] PCI: qcom: power the QCA6390 WLAN before link training
+
+The generic pci_pwrctl consumer binds to the wifi@0 device node and only
+runs once the root port has been registered.  On Umi the QCA6390 is
+powered only by the qca6390-pmu sequencer, so qcom_pcie_host_init()
+trains the link while the card is still off, logs "Device not found" and
+the endpoint only appears after userspace loads the consumer module.
+
+Ask the same qca6390-pmu sequencer to power its "wlan" target before
+PERST# is released.  The compatible lookup keeps this a no-op on boards
+without that PMU, and a provider that has not probed yet only defers the
+power-up to the existing pci_pwrctl path.
+
+This follows the pcie-qcom-early-poweron approach from
+colorgarden/umi-mainline (GPL-2.0-only), adapted to the 6.18 pwrseq
+consumer API and to the devm/of device lifetime helpers.
+
+diff --git a/drivers/pci/controller/dwc/pcie-qcom.c b/drivers/pci/controller/dwc/pcie-qcom.c
+index 559aa85..c1d522f 100644
+--- a/drivers/pci/controller/dwc/pcie-qcom.c
++++ b/drivers/pci/controller/dwc/pcie-qcom.c
+@@ -22,6 +22,7 @@
+ #include <linux/init.h>
+ #include <linux/of.h>
+ #include <linux/of_pci.h>
++#include <linux/of_platform.h>
+ #include <linux/pci.h>
+ #include <linux/pci-ecam.h>
+ #include <linux/pm_opp.h>
+@@ -29,6 +30,7 @@
+ #include <linux/platform_device.h>
+ #include <linux/phy/pcie.h>
+ #include <linux/phy/phy.h>
++#include <linux/pwrseq/consumer.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/reset.h>
+ #include <linux/slab.h>
+@@ -1312,6 +1314,45 @@ static int qcom_pcie_phy_power_on(struct qcom_pcie *pcie)
+ 	return 0;
+ }
+ 
++/*
++ * Power the WLAN endpoint before PERST# is released.
++ *
++ * The generic pci_pwrctl consumer is bound to the wifi@0 node and only runs
++ * once the root port (and its child device node) has been registered, which is
++ * after qcom_pcie_host_init() has already tried to train the link.  On boards
++ * where the QCA6390 PMU is the only thing that powers the card this leaves the
++ * link down until userspace loads the consumer, so ask the same PMU power
++ * sequencer to power the "wlan" target here instead.
++ */
++static void qcom_pcie_power_on_wlan(struct qcom_pcie *pcie)
++{
++	struct device_node *pmu_node;
++	struct platform_device *pmu;
++	struct pwrseq_desc *pwrseq;
++	int ret;
++
++	pmu_node = of_find_compatible_node(NULL, NULL, "qcom,qca6390-pmu");
++	if (!pmu_node)
++		return;
++
++	pmu = of_find_device_by_node(pmu_node);
++	of_node_put(pmu_node);
++	if (!pmu)
++		return;
++
++	pwrseq = devm_pwrseq_get(&pmu->dev, "wlan");
++	if (IS_ERR(pwrseq)) {
++		dev_info(pcie->dev, "early WLAN power-on: pwrseq unavailable (%ld)\n",
++			 PTR_ERR(pwrseq));
++	} else {
++		ret = pwrseq_power_on(pwrseq);
++		dev_info(pcie->dev, "early WLAN power-on: pwrseq_power_on -> %d\n",
++			 ret);
++	}
++
++	platform_device_put(pmu);
++}
++
+ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
+ {
+ 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
+@@ -1336,6 +1377,8 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
+ 
+ 	qcom_pcie_clear_aspm_l0s(pcie->pci);
+ 
++	qcom_pcie_power_on_wlan(pcie);
++
+ 	qcom_ep_reset_deassert(pcie);
+ 
+ 	if (pcie->cfg->ops->config_sid) {

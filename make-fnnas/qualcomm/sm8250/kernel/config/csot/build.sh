@@ -32,7 +32,7 @@ test "$(git -C linux rev-parse HEAD)" = "$linux_rev"
 command -v cc >/dev/null || { echo 'Host C compiler required for the panel harness' >&2; exit 1; }
 mkdir "$out" display-inputs
 cp -a "$display_source/kernel" "$display_source/tools" "$display_source/tests" display-inputs/
-fragments=("$out/native-display.config" "$here/btrfs-built-in.config" display-inputs/kernel/display/umi-native-dsi.config)
+fragments=("$out/native-display.config" "$here/btrfs-built-in.config" "$here/pci-wlan-power.config" display-inputs/kernel/display/umi-native-dsi.config)
 if [[ $out == csot-out ]]; then
     test -d "$lab_source/kernel" && test -d "$lab_source/tools"
     mkdir board-lab-inputs

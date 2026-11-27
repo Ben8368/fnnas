@@ -32,6 +32,7 @@ PowerShell 可逐步执行相同命令（用 `$serial` 保存序列号）；每�
 
 ## 验收 fnOS
 
+- **内核日志。** 冻结音频的发布 DTB 不应再探测 `/audio-codec` 或两颗 CS35L41，journal 中不应出现 `supply VA not found`、`Subsystem ID not found` 或 `mbhc-buttons-vthreshold-microvolt`。PCIe 主机应在链路训练前打印 `early WLAN power-on: pwrseq_power_on -> 0`，随后 ath11k 端点正常枚举；若该行是 `pwrseq unavailable`，记录完整原因并确认 `Device not found` 是否随之消失。`ufshcd-qcom ... vdd-hba-supply` 仍是信息级提示，不据此判定 UFS 失败。
 - **首启与 USB。** 电脑应同时发现 NCM 网卡和 ACM 串口。串口不用输入即可捕获完整 `UMI_BOOTLOG/1` 摘要，不应有 getty 或 shell。调试镜像在采集器连接时还应回放本次 journal 并跟随新记录，重连应能重新读到启动记录。记录内核、根文件系统、DTBO 活动索引及 USB 地址。摘要中的 `dtbo_sha256=unavailable` 表示运行时未取得读回摘要；单独保留已验证的随包摘要和 Fastboot 写入证据，不冒充读回，也不把该值当成串口失效。USB DHCP 应分配 `172.16.42.2/24`，不下发默认网关或 DNS。在 <http://172.16.42.1:5666> 创建管理员账号并登录。仅 DHCP 失败时，在已识别的 USB 网卡上临时手配地址并单独记录。
 - **日志与存储。** 如果容量异常或出现报错，先不要重启、初始化、扩容或改分区。网页登录后的事件日志和 USB 摘要都不能代替内核与系统 journal。通过本地 USB 网络上的 SSH 登录管理员会话，用 `sudo bash collect-boot-evidence.sh 0` 将**完整内核 journal、系统 journal、dmesg、warning 以上日志、失败服务和只读 GPT**收集到电脑。`-1` 或 Boot ID 可选择保留的历史启动；块设备、dmesg 和服务状态始终是采集当时的现场。保留 boot ID、设备时间和单调启动时间；看到 `[collection failed: …]` 要核对具体缺失段。若系统没有启动到 journald/SSH，使用恢复路径检查已有的 pstore/持久 journal，不把缺失日志当成没有错误。对照块设备与分区容量、SCSI LUN、根挂载、Btrfs 实际容量和向导候选；匹配型号不能证明小容量设备可安全用作数据盘。只在获准使用、已核对节点的独立测试盘上做读写。原始日志留在本地，外发前审查并脱敏。
 - **重启与恢复。** 从已安装的 fnOS 请求进入 Fastboot，确认目标设备成功枚举，再重启回同一套 fnOS 并复查登录和存储。保留启动日志、镜像与内核包摘要、源提交和 Linux 提交；只有使用 CI 时才记录 Run ID 与 Attempt。分别记录内核、fnOS 用户态和 OTA 的实际验收结果。
